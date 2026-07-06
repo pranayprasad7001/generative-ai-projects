@@ -1,7 +1,7 @@
 ````markdown
 # Q&A Chatbot with Groq ⚡
 
-A lightweight Question & Answer chatbot built with **LangChain**, **Groq**, and **Streamlit**. The application leverages **LangChain Prompt Templates** to structure prompts before sending them to Groq-hosted open-source language models.
+A lightweight Question & Answer chatbot built with LangChain, Groq, and Streamlit. The application leverages LangChain Prompt Templates to structure prompts before sending them to Groq-hosted open-source language models.
 
 ## 🚀 Live Demo
 
@@ -31,7 +31,6 @@ qa-chatbot/
 ├── app.py
 ├── requirements.txt
 ├── pyproject.toml
-├── .env.example
 └── README.md
 ```
 
