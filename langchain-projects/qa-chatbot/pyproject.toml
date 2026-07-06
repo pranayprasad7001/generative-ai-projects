@@ -1,4 +1,4 @@
-[Q&A Chatbot]
+[project]
 name = "qa-chatbot"
 version = "0.1.0"
 description = "Q&A Chatbot using LangChain, Groq and Streamlit"
