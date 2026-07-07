@@ -48,3 +48,6 @@ pip-wheel-metadata/
 
 # Miscellaneous Cache
 .cache/
+
+# Persistent DB
+chroma_db
