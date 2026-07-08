@@ -2,6 +2,9 @@
 .venv/
 venv/
 env/
+ENV/
+env.bak/
+venv.bak/
 
 # Environment Variables
 .env
@@ -49,5 +52,9 @@ pip-wheel-metadata/
 # Miscellaneous Cache
 .cache/
 
-# Persistent DB
-chroma_db
+# Chroma DB / Vector Stores
+chroma_db/
+*.sqlite3
+
+# Streamlit
+.streamlit/
