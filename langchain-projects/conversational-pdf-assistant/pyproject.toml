@@ -1,0 +1,22 @@
+[project]
+name = "converational-qa-chatbot-with-history"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.9",
+    "langchain>=1.3.11",
+    "langchain-chroma>=1.1.0",
+    "langchain-classic>=1.0.8",
+    "langchain-community>=0.4.2",
+    "langchain-core>=1.4.8",
+    "langchain-groq>=1.1.3",
+    "langchain-huggingface>=1.2.2",
+    "pypdf>=6.14.2",
+    "pysqlite3-binary>=0.5.4.post2 ; sys_platform == 'linux'",
+    "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.6.0",
+    "streamlit>=1.59.0",
+    "torchvision>=0.28.0",
+]
