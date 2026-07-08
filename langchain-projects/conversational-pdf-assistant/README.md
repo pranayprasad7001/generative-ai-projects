@@ -1,122 +1,117 @@
-# Research Paper Assistant (RAG System)
+# Conversational PDF Assistant
 
-A Retrieval-Augmented Generation (RAG) application that enables users to ask questions about one or more research papers in natural language. The application retrieves relevant sections from uploaded PDF documents and uses an LLM to generate context-aware responses while displaying the supporting document chunks.
+A Retrieval-Augmented Generation (RAG) application that enables users to upload one or more PDF documents and interact with them through a conversational interface. The assistant maintains chat history, allowing follow-up questions while preserving context throughout the conversation.
 
 ## Live Demo
 
-- **GitHub Repository:** https://github.com/pranayprasad7001/generative-ai-projects/tree/main/langchain-projects/research-paper-assistant-rag
-- **Streamlit Application:** https://interactive-research-paper-assistant.streamlit.app
+**Streamlit:**  
+https://conversational-pdf-assistant.streamlit.app
+
+## GitHub Repository
+
+https://github.com/pranayprasad7001/generative-ai-projects/tree/main/langchain-projects/conversational-pdf-assistant
 
 ---
 
 ## Features
 
-- Upload and query multiple research papers in PDF format
-- Semantic search using vector embeddings
-- Retrieval-Augmented Generation (RAG) pipeline
-- Persistent Chroma vector database
-- Local Hugging Face embedding model
-- Batched document embedding for memory-efficient indexing
-- Source document visualization for retrieved responses
-- Interactive Streamlit interface
+- Upload and chat with multiple PDF documents
+- Conversational question answering with chat history
+- History-aware retrieval for contextual follow-up questions
+- Semantic document search using vector embeddings
+- Configurable LLM, temperature, and maximum token settings
+- Session-based conversation management
+- Automatic document chunking and embedding generation
+- Streamlit-based user interface
 
 ---
 
 ## Tech Stack
 
-| Category | Technologies |
-|----------|--------------|
-| Frontend | Streamlit |
-| Framework | LangChain |
-| LLM | Groq (Llama 3.3 70B Versatile) |
-| Embeddings | Hugging Face (all-MiniLM-L6-v2) |
-| Vector Database | ChromaDB |
-| Document Loader | PyPDFLoader |
-| Language | Python |
+### Frameworks & Libraries
+
+- Python
+- Streamlit
+- LangChain
+- LangChain Chroma
+- LangChain HuggingFace
+- LangChain Groq
+
+### Models
+
+- Groq LLMs
+- BAAI/bge-small-en-v1.5 Embedding Model
+
+### Vector Database
+
+- ChromaDB
 
 ---
 
 ## Project Workflow
 
-```text
-Upload PDF Documents
-        │
-        ▼
-Extract Document Text
-        │
-        ▼
-Split into Chunks
-        │
-        ▼
-Generate Embeddings
-        │
-        ▼
-Store in ChromaDB
-        │
-        ▼
-User Query
-        │
-        ▼
-Retrieve Relevant Chunks
-        │
-        ▼
-Generate Response using LLM
-        │
-        ▼
-Display Answer with Source Context
-```
+1. Upload one or more PDF documents.
+2. Extract text from each document.
+3. Split documents into semantic chunks.
+4. Generate embeddings for every chunk.
+5. Store embeddings in a Chroma vector database.
+6. Retrieve the most relevant document chunks for each query.
+7. Rephrase follow-up questions using conversation history.
+8. Generate grounded responses using the retrieved context.
+9. Maintain session-based chat history for contextual conversations.
 
 ---
 
 ## Project Structure
 
-```text
-research-paper-assistant-rag/
+```
+conversational-pdf-assistant/
 │
 ├── app.py
 ├── requirements.txt
-├── README.md
+├── .env
 ├── .gitignore
-└── chroma_db/
+├── README.md
+└── assets/
 ```
 
 ---
 
 ## Installation
 
-Clone the repository.
+### Clone the repository
 
 ```bash
 git clone https://github.com/pranayprasad7001/generative-ai-projects.git
 ```
 
-Navigate to the project directory.
+### Navigate to the project
 
 ```bash
-cd generative-ai-projects/langchain-projects/research-paper-assistant-rag
+cd generative-ai-projects/langchain-projects/conversational-pdf-assistant
 ```
 
-Create a virtual environment.
+### Create a virtual environment
 
 ```bash
 python -m venv .venv
 ```
 
-Activate the virtual environment.
+### Activate the environment
 
-**Windows**
+Windows
 
 ```bash
 .venv\Scripts\activate
 ```
 
-**Linux / macOS**
+Linux / macOS
 
 ```bash
 source .venv/bin/activate
 ```
 
-Install the required dependencies.
+### Install dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -126,10 +121,10 @@ pip install -r requirements.txt
 
 ## Environment Variables
 
-Create a `.env` file in the project directory.
+Create a `.env` file in the project root.
 
 ```env
-GROQ_API_KEY=your_groq_api_key
+GROQ_API_KEY=your_api_key
 ```
 
 ---
@@ -144,41 +139,41 @@ streamlit run app.py
 
 ## How It Works
 
-1. Upload one or more research papers.
-2. Process and embed the uploaded documents.
-3. Ask questions related to the uploaded papers.
-4. The application retrieves the most relevant document chunks.
-5. The LLM generates an answer using the retrieved context.
-6. Retrieved source chunks are displayed for reference.
+- PDFs are uploaded through the Streamlit interface.
+- Text is extracted using `PyPDFLoader`.
+- Documents are split into manageable chunks.
+- HuggingFace embeddings are generated for every chunk.
+- ChromaDB stores the vector representations.
+- A history-aware retriever reformulates follow-up questions using previous conversation context.
+- Retrieved document chunks are passed to the LLM to generate grounded responses.
+- Chat history is maintained throughout the session to support natural multi-turn conversations.
 
 ---
 
-## Current Limitations
+## Sample Use Cases
 
-- Supports PDF documents only.
-- Uploaded documents must be processed before querying.
-- Response quality depends on the retrieved context.
-- Conversation history is not maintained across questions.
+- Research papers
+- Technical documentation
+- User manuals
+- Reports
+- Academic notes
+- Company documentation
+- Books and reference materials
 
 ---
 
 ## Future Improvements
 
-- Conversation memory
-- Advanced retrieval strategies
-- Metadata-based document filtering
+- Source citations for generated answers
 - Streaming responses
-- Improved citation support
-- Support for additional document formats
+- Conversation export
+- Persistent vector database
+- OCR support for scanned PDFs
+- Hybrid search (keyword + semantic)
+- Authentication and user management
 
 ---
 
-## Acknowledgements
+## License
 
-This project uses the following open-source libraries and services:
-
-- LangChain
-- ChromaDB
-- Hugging Face
-- Streamlit
-- Groq API
+This project is licensed under the MIT License.
