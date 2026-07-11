@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 import time
 import streamlit as st
@@ -53,9 +54,6 @@ else:
     st.warning("⚠️ Please enter your Groq API Key in the sidebar to start.")
     st.stop()
 
-# Initialize Persistent Storage
-PERSIST_DIRECTORY = "./chroma_db"
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -97,10 +95,21 @@ if uploaded_files:
 
                 text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
                 final_documents = text_splitter.split_documents(docs)
-                
+
+                # Clean up any previous session's vector store before creating a new one
+                if "chroma_dir" in st.session_state and os.path.exists(st.session_state.chroma_dir):
+                    shutil.rmtree(st.session_state.chroma_dir, ignore_errors=True)
+
+                # SECURITY/ISOLATION FIX: use a fresh temp directory per session instead of a
+                # shared "./chroma_db" path. Streamlit Community Cloud runs one shared process
+                # for every visitor, so a fixed shared path would let one user's uploaded papers
+                # (and the answers derived from them) leak into another user's session.
+                persist_directory = tempfile.mkdtemp()
+                st.session_state.chroma_dir = persist_directory
+
                 # Batch processing to prevent Out-Of-Memory (OOM) crashes on 1GB cloud containers
                 batch_size = 100
-                vectorstore = Chroma(embedding_function=embeddings, persist_directory=PERSIST_DIRECTORY)
+                vectorstore = Chroma(embedding_function=embeddings, persist_directory=persist_directory)
                 
                 progress_bar = st.progress(0, text="Embedding batches into local vector store...")
                 
@@ -123,8 +132,8 @@ if user_input := st.chat_input("Ask a question about the uploaded papers..."):
     with st.chat_message("user"):
         st.markdown(user_input)
         
-    if os.path.exists(PERSIST_DIRECTORY):
-        vectorstore = Chroma(persist_directory=PERSIST_DIRECTORY, embedding_function=embeddings)
+    if "chroma_dir" in st.session_state and os.path.exists(st.session_state.chroma_dir):
+        vectorstore = Chroma(persist_directory=st.session_state.chroma_dir, embedding_function=embeddings)
         retriever = vectorstore.as_retriever(search_kwargs={"k": 5})
         
         document_chain = create_stuff_documents_chain(llm, prompt)
