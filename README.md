@@ -1,20 +1,30 @@
 # Generative AI Projects
 
-A repository dedicated to learning and building Generative AI applications from the ground up. This repository will gradually grow with practical projects covering LLMs, RAG, AI agents, and modern GenAI frameworks.
+A collection of practical Generative AI projects built while learning Large Language Models (LLMs), Retrieval-Augmented Generation (RAG), AI agents, and modern application development with LangChain. Each project focuses on implementing a different concept and includes source code, documentation, and a deployed Streamlit application where applicable.
 
-## Current Project
+## Projects
 
-- 🤖 Q&A Chatbot with Groq
+| Project | Description |
+|---------|-------------|
+| 🤖 QA Chatbot | A question-answering chatbot built using LangChain and Groq. |
+| 📄 Interactive Research Paper Assistant | Upload and interact with research papers using Retrieval-Augmented Generation (RAG). |
+| 💬 Conversational PDF Assistant | Chat with PDF documents while maintaining conversation history. |
+| 🔍 Agentic Search Engine | Search the web using AI agents and multiple tools such as search engines, Wikipedia, and ArXiv. |
+| 🗄️ SQL Chat Assistant | Interact with SQLite and MySQL databases using natural language through a LangChain SQL Agent. |
 
-## Planned Topics
+## Topics Covered
 
-- 📚 Retrieval-Augmented Generation (RAG)
-- 🧠 AI Agents
-- 💬 Conversational AI
-- 🔗 LangChain & LangGraph
-- 🦙 Local LLMs (Ollama)
-- ☁️ OpenAI, Groq & Hugging Face APIs
-- 🚀 Streamlit Applications
+- Large Language Models (LLMs)
+- Prompt Engineering
+- Retrieval-Augmented Generation (RAG)
+- AI Agents
+- Tool Calling
+- SQL Agents
+- Conversational AI
+- Document Question Answering
+- LangChain
+- LangGraph (upcoming)
+- Streamlit Deployment
 
 ## Tech Stack
 
@@ -26,10 +36,15 @@ A repository dedicated to learning and building Generative AI applications from 
 - OpenAI
 - Ollama
 - Hugging Face
+- SQLAlchemy
+- SQLite
+- MySQL
+- FAISS
+- Chroma
 
 ## Goal
 
-Document my journey of learning and building practical Generative AI projects, from beginner implementations to production-ready applications.
+Build a collection of practical Generative AI projects while learning modern LLM application development. The repository is updated as new concepts, frameworks, and projects are explored.
 
 ## License
 
