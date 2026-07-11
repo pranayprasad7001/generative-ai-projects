@@ -9,7 +9,7 @@ A collection of practical Generative AI projects built while learning Large Lang
 | 🤖 QA Chatbot | A question-answering chatbot built using LangChain and Groq. |
 | 📄 Interactive Research Paper Assistant | Upload and interact with research papers using Retrieval-Augmented Generation (RAG). |
 | 💬 Conversational PDF Assistant | Chat with PDF documents while maintaining conversation history. |
-| 🔍 Agentic Search Engine | Search the web using AI agents and multiple tools such as search engines, Wikipedia, and ArXiv. |
+| 🔍 Agentic Search Engine | Search the web using an AI agent with LangChain tool-calling, powered by the Exa Search API. |
 | 🗄️ SQL Chat Assistant | Interact with SQLite and MySQL databases using natural language through a LangChain SQL Agent. |
 
 ## Topics Covered
