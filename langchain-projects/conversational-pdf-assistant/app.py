@@ -132,8 +132,13 @@ def create_qa_chain(llm):
     return create_stuff_documents_chain(llm, qa_prompt)
 
 # Streamlit App UI & Execution Flow 
+st.set_page_config(
+    page_title="Conversational RAG with PDF Upload and Chat History",
+    page_icon="📚",
+    layout="wide"
+)
 
-st.title("Conversational RAG with PDF Upload and Chat History")
+st.title("Conversational RAG with PDF Upload and Chat History 📚")
 st.write("Upload PDFs and Chat with their Content")
 
 # Initialize session states for pipeline readiness
