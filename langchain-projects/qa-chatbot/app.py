@@ -38,6 +38,13 @@ def generate_response(question, api_key, selected_model, temperature, max_tokens
     answer = chain.invoke({'question': question})
     return answer
 
+# Configure page settings
+st.set_page_config(
+    page_title="Q&A Chatbot with Groq ⚡",
+    page_icon="⚡",
+    layout="wide"
+)
+
 # Title of the App
 st.title("Q&A Chatbot with Groq ⚡")
 
