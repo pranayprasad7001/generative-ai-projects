@@ -1,3 +1,4 @@
+import os
 import validators 
 import streamlit as st
 from langchain_groq import ChatGroq
@@ -5,6 +6,10 @@ from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 from langchain_classic.prompts import PromptTemplate
 from langchain_classic.chains.summarize import load_summarize_chain
 from langchain_classic.document_loaders import YoutubeLoader, UnstructuredURLLoader
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
+os.environ["LANGCHAIN_PROJECT"] = st.secrets["LANGCHAIN_PROJECT"]
 
 # Model Initialization
 def model_initialization(api_key, model, temp):

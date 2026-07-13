@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import streamlit as st 
 from pathlib import Path
@@ -9,6 +10,10 @@ from langchain_classic.callbacks import StreamlitCallbackHandler
 from langchain_classic.agents.agent_toolkits import SQLDatabaseToolkit
 from sqlalchemy import create_engine
 from langchain_groq import ChatGroq
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
+os.environ["LANGCHAIN_PROJECT"] = st.secrets["LANGCHAIN_PROJECT"]
 
 # Setting Up the Page Configs
 st.set_page_config(page_title="SQL Agent", page_icon="🦜")
