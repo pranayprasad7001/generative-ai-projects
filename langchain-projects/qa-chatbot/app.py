@@ -40,7 +40,7 @@ def generate_response(question, api_key, selected_model, temperature, max_tokens
 
 # Configure page settings
 st.set_page_config(
-    page_title="Q&A Chatbot with Groq ⚡",
+    page_title="Q&A Chatbot with Groq",
     page_icon="⚡",
     layout="wide"
 )
