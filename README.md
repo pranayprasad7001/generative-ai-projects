@@ -11,6 +11,7 @@ A collection of practical Generative AI projects built while learning Large Lang
 | 💬 Conversational PDF Assistant | Chat with PDF documents while maintaining conversation history. |
 | 🔍 Agentic Search Engine | Search the web using an AI agent with LangChain tool-calling, powered by the Exa Search API. |
 | 🗄️ SQL Chat Assistant | Interact with SQLite and MySQL databases using natural language through a LangChain SQL Agent. |
+| 📑 URL Content Summarizer | Generate summaries from YouTube videos and web pages using LangChain and Groq. |
 
 ## Topics Covered
 
@@ -19,11 +20,11 @@ A collection of practical Generative AI projects built while learning Large Lang
 - Retrieval-Augmented Generation (RAG)
 - AI Agents
 - Tool Calling
+- Text Summarization
 - SQL Agents
 - Conversational AI
 - Document Question Answering
 - LangChain
-- LangGraph (upcoming)
 - Streamlit Deployment
 
 ## Tech Stack
