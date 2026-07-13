@@ -6,10 +6,11 @@ from langchain_classic.text_splitter import RecursiveCharacterTextSplitter
 from langchain_classic.prompts import PromptTemplate
 from langchain_classic.chains.summarize import load_summarize_chain
 from langchain_classic.document_loaders import YoutubeLoader, UnstructuredURLLoader
+from youtube_transcript_api._errors import RequestBlocked, IpBlocked, TranscriptsDisabled, NoTranscriptFound
 
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
-os.environ["LANGCHAIN_PROJECT"] = st.secrets["LANGCHAIN_PROJECT"]
+os.environ["LANGSMITH_TRACING_V2"] = st.secrets["LANGSMITH_TRACING_V2"]
+os.environ["LANGSMITH_API_KEY"] = st.secrets["LANGSMITH_API_KEY"]
+os.environ["LANGSMITH_PROJECT"] = st.secrets["LANGSMITH_PROJECT"]
 
 # Model Initialization
 def model_initialization(api_key, model, temp):
@@ -46,10 +47,20 @@ if st.button("Summarize"):
             with st.spinner("Fetching and Summarizing the Content..."):
                 
                 if "youtube.com" in generic_url or "youtu.be" in generic_url:
-                    loader = YoutubeLoader.from_youtube_url(generic_url, add_video_info=False)
+                    try:
+                        loader = YoutubeLoader.from_youtube_url(generic_url, add_video_info=False)
+                        docs = loader.load()
+                    except RequestBlocked:
+                        st.error("YouTube is blocking transcript requests from this app's cloud server — a known limitation of free-tier hosting (Streamlit Cloud's IPs are blocked by YouTube). Try a webpage URL instead, or run this app locally to summarize YouTube videos.")
+                        st.stop()
+                    except (TranscriptsDisabled, NoTranscriptFound):
+                        st.error("This video doesn't have a transcript available.")
+                        st.stop()
+                        
                 else:
                     loader = UnstructuredURLLoader(
-                        urls=[generic_url], 
+                        urls=[generic_url],
+                        continue_on_failure=False, 
                         ssl_verify=True, 
                         headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
                     )
