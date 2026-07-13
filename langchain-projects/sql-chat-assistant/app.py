@@ -11,9 +11,9 @@ from langchain_classic.agents.agent_toolkits import SQLDatabaseToolkit
 from sqlalchemy import create_engine
 from langchain_groq import ChatGroq
 
-os.environ["LANGCHAIN_TRACING_V2"] = "true"
-os.environ["LANGCHAIN_API_KEY"] = st.secrets["LANGCHAIN_API_KEY"]
-os.environ["LANGCHAIN_PROJECT"] = st.secrets["LANGCHAIN_PROJECT"]
+os.environ["LANGSMITH_TRACING_V2"] = st.secrets["LANGSMITH_TRACING_V2"]
+os.environ["LANGSMITH_API_KEY"] = st.secrets["LANGSMITH_API_KEY"]
+os.environ["LANGSMITH_PROJECT"] = st.secrets["LANGSMITH_PROJECT"]
 
 # Setting Up the Page Configs
 st.set_page_config(page_title="SQL Agent", page_icon="🦜")
