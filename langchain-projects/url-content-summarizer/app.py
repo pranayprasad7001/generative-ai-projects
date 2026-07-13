@@ -45,7 +45,7 @@ if st.button("Summarize"):
                 else:
                     loader = UnstructuredURLLoader(
                         urls=[generic_url], 
-                        ssl_verify=False, 
+                        ssl_verify=True, 
                         headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"}
                     )
                 
@@ -93,4 +93,8 @@ if st.button("Summarize"):
                 st.markdown(output_summary)
             
         except Exception as e:
-            st.error(f"Error: {e}")
+            error_msg = str(e)
+            if "SSL" in error_msg or "CERTIFICATE_VERIFY_FAILED" in error_msg:
+                st.error("This site's SSL certificate couldn't be verified. Try a different URL.")
+            else:
+                st.error(f"Error: {e}")
