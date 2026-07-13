@@ -1,0 +1,11 @@
+streamlit
+langchain
+langchain-core
+langchain-community
+langchain-classic
+langchain-groq
+validators
+youtube-transcript-api
+unstructured
+pytube
+transformers
