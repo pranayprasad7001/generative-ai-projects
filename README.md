@@ -1,132 +1,104 @@
 # Generative AI Projects
 
-A collection of practical **Generative AI** projects built while learning **Large Language Models (LLMs), Retrieval-Augmented Generation (RAG), AI Agents, Local LLMs, and modern application development with LangChain**.
+A collection of Generative AI applications built while learning and applying LangChain, RAG, AI agents, and modern LLM tooling — one project at a time, from simple prompt-based chatbots to multi-tool agents and retrieval systems backed by different vector stores.
 
-Each project focuses on a specific concept and includes clean source code, documentation, and a deployed Streamlit application where applicable.
+Each project lives in its own folder under `langchain-projects/`, is independently deployable, and ships with its own README covering setup, tech stack, and how it works.
 
 ---
 
 ## Projects
 
-| Project | Description | Deployment |
-|---------|-------------|------------|
-| 🤖 QA Chatbot | A question-answering chatbot built using LangChain and Groq. | ✅ |
-| 📄 Interactive Research Paper Assistant | Upload and interact with research papers using Retrieval-Augmented Generation (RAG). | ✅ |
-| 💬 Conversational PDF Assistant | Chat with PDF documents while maintaining conversation history. | ✅ |
-| 🗃️ AstraDB Multi-Doc RAG Hub | Upload multiple PDF documents, index them into Astra DB, and perform conversational question answering using configurable Hugging Face models with session-isolated retrieval. | ✅ |
-| 🔍 Agentic Search Engine | Search the web using an AI agent with LangChain tool-calling and external search tools. | ✅ |
-| 🗄️ SQL Chat Assistant | Interact with SQLite and MySQL databases using natural language through a LangChain SQL Agent. | ✅ |
-| 📑 URL Content Summarizer | Generate summaries from YouTube videos and web pages using LangChain and Groq. | ✅ |
-| 🔢 Math & Reasoning Agent | Solve mathematical, logical, and reasoning problems using a LangChain ReAct agent with Google Gemini, Wikipedia, and calculator tools. | ✅ |
-| 💻 Multi-language Code Assistant | Offline AI coding assistant powered by Ollama for explaining, debugging, reviewing, and generating code across multiple programming languages. | Local |
+| Project | Description | Live Demo |
+|---|---|---|
+| [Conversational PDF Assistant](langchain-projects/conversational-pdf-assistant) | RAG chatbot over uploaded PDFs with history-aware retrieval for follow-up questions | [Demo](https://conversational-pdf-assistant.streamlit.app) |
+| [Agentic Search Engine](langchain-projects/agentic-search-engine) | Tool-calling agent that answers questions using live web search (Exa) | [Demo](https://agentic-search-engine-with-exa.streamlit.app/) |
+| [SQL Chat Assistant](langchain-projects/sql-chat-assistant) | Natural language to SQL agent for SQLite/MySQL with read-only enforcement | [Demo](https://sql-db-chat-assistant.streamlit.app/) |
+| [URL Content Summarizer](langchain-projects/url-content-summarizer) | Summarizes YouTube videos and web pages, auto-switching between stuff and map-reduce chains | [Demo](https://url-content-summarizer.streamlit.app/) |
+| [AstraDB Multi-Doc RAG Hub](langchain-projects/astradb-multidoc-rag-hub) | Multi-PDF RAG using Astra DB as the vector store with Hugging Face inference and session-isolated indexing | [Demo](https://astradb-multidoc-rag.streamlit.app/) |
+| [Research Paper Assistant (RAG)](langchain-projects/research-paper-assistant-rag) | RAG system for research papers with persistent Chroma storage and visible source chunks | [Demo](https://interactive-research-paper-assistant.streamlit.app) |
+| [Math & Reasoning Agent](langchain-projects/math-reasoning-agent) | ReAct agent that dynamically picks between a calculator, reasoning chain, and Wikipedia lookup | [Demo](https://math-reasoning-agent.streamlit.app/) |
+| [Multi-language Code Assistant](langchain-projects/multi-language-code-assistant) | Local, fully offline coding assistant using Ollama and Gradio (two iterations, v1 basic → v2 improved UI) | Runs locally, not deployed |
+| [Q&A Chatbot with Groq](langchain-projects/qa-chatbot) | The original starter project — a lightweight prompt-template-based Q&A chatbot | [Demo](https://question-answer-chatbot-groq.streamlit.app) |
 
 ---
 
-## Topics Covered
+## What This Repo Covers
 
-- Large Language Models (LLMs)
-- Prompt Engineering
-- Retrieval-Augmented Generation (RAG)
-- Conversational RAG
-- Multi-Document RAG
-- AI Agents
-- ReAct Agents
-- Tool Calling
-- Local LLM Applications
-- Ollama
-- Vector Databases
-- Mathematical Reasoning
-- Logical Reasoning
-- SQL Agents
-- Document Question Answering
-- Text Summarization
-- Code Generation
-- Code Review
-- Debugging Assistants
-- LangChain
-- LangGraph
-- Streamlit
-- Gradio
+- **Retrieval-Augmented Generation (RAG)** — with two different vector store backends (ChromaDB, Astra DB) and both Groq and Hugging Face-hosted models
+- **AI Agents** — tool-calling agents (web search) and ReAct agents (multi-tool: math, reasoning, Wikipedia)
+- **Conversational AI** — session-based chat history, history-aware retrieval for follow-ups
+- **SQL Agents** — natural language database querying with read-only safeguards and prompt-injection awareness
+- **Local LLMs** — an Ollama-based offline coding assistant, no external API dependency
+- **Summarization strategies** — automatic stuff vs. map-reduce chain selection based on content length
+- **LangSmith tracing** — integrated across projects for observability into agent/chain execution
 
 ---
 
 ## Tech Stack
 
-### Frameworks
+**Languages & Core:** Python
 
-- LangChain
-- Gradio
-- Streamlit
+**LLM Frameworks:** LangChain, LangGraph
 
-### LLM Providers
+**Models / APIs:** Groq, Google Gemini, Hugging Face Inference API, Ollama (local)
 
-- Groq
-- Google Gemini
-- Ollama
-- Hugging Face
+**Vector Stores:** ChromaDB, Astra DB
 
-### Vector Databases
+**Interfaces:** Streamlit, Gradio
 
-- Astra DB
-- FAISS
-- Chroma
-
-### Databases
-
-- SQLite
-- MySQL
-
-### Languages
-
-- Python
+**Other:** SQLAlchemy, Exa Search API, Wikipedia API, LangSmith
 
 ---
 
 ## Repository Structure
 
-```text
+```
 generative-ai-projects/
 │
-└── langchain-projects/
-    ├── qa-chatbot/
-    ├── research-paper-assistant-rag/
-    ├── conversational-pdf-assistant/
-    ├── astradb-multi-doc-rag-hub/
-    ├── agentic-search-engine/
-    ├── sql-chat-assistant/
-    ├── url-content-summarizer/
-    ├── math-reasoning-agent/
-    └── multi-language-code-assistant/
+├── langchain-projects/
+│   ├── conversational-pdf-assistant/
+│   ├── agentic-search-engine/
+│   ├── sql-chat-assistant/
+│   ├── url-content-summarizer/
+│   ├── astradb-multidoc-rag-hub/
+│   ├── research-paper-assistant-rag/
+│   ├── math-reasoning-agent/
+│   ├── multi-language-code-assistant/
+│   └── qa-chatbot/
+│
+├── LICENSE
+└── README.md
 ```
 
 ---
 
-## Project Goals
+## Running a Project Locally
 
-This repository serves as a hands-on collection of projects exploring modern Generative AI development, including:
+Each project is self-contained. General pattern:
 
-- Building LLM-powered applications
-- Retrieval-Augmented Generation (RAG)
-- AI Agents and Tool Calling
-- Local LLM inference using Ollama
-- Vector databases
-- SQL Agents
-- Document understanding
-- Code assistants
-- End-to-end AI application development with LangChain
+```bash
+git clone https://github.com/pranayprasad7001/generative-ai-projects.git
+cd generative-ai-projects/langchain-projects/<project-name>
 
-The repository continues to grow as new concepts, frameworks, and projects are explored.
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+Most projects need a Groq API key (free tier at [console.groq.com](https://console.groq.com/keys)); a few require additional credentials (Astra DB, Google Gemini, Exa) — see the individual project README for specifics.
 
 ---
 
-## Deployment
+## Links
 
-Most projects include a deployed Streamlit application.
-
-Projects that run completely offline using local models (such as **Multi-language Code Assistant**) are intended for local execution and are therefore not deployed.
+- **GitHub:** [github.com/pranayprasad7001](https://github.com/pranayprasad7001)
+- **LinkedIn:** [linkedin.com/in/pranayprasad7](https://linkedin.com/in/pranayprasad7)
+- **Streamlit Apps:** [share.streamlit.io/user/pranayprasad7001](https://share.streamlit.io/user/pranayprasad7001)
 
 ---
 
 ## License
 
-This repository is licensed under the **MIT License**.
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
