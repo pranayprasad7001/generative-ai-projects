@@ -9,6 +9,7 @@ A collection of practical Generative AI projects built while learning Large Lang
 | 🤖 QA Chatbot | A question-answering chatbot built using LangChain and Groq. |
 | 📄 Interactive Research Paper Assistant | Upload and interact with research papers using Retrieval-Augmented Generation (RAG). |
 | 💬 Conversational PDF Assistant | Chat with PDF documents while maintaining conversation history. |
+| 🗃️ AstraDB Multi-Doc RAG Hub | Upload multiple PDF documents, index them into Astra DB, and perform conversational question answering using configurable Hugging Face models with session-isolated retrieval. |
 | 🔍 Agentic Search Engine | Search the web using an AI agent with LangChain tool-calling and external search tools. |
 | 🗄️ SQL Chat Assistant | Interact with SQLite and MySQL databases using natural language through a LangChain SQL Agent. |
 | 📑 URL Content Summarizer | Generate summaries from YouTube videos and web pages using LangChain and Groq. |
@@ -19,9 +20,11 @@ A collection of practical Generative AI projects built while learning Large Lang
 - Large Language Models (LLMs)
 - Prompt Engineering
 - Retrieval-Augmented Generation (RAG)
+- Multi-Document RAG
 - AI Agents
 - ReAct Agents
 - Tool Calling
+- Vector Databases
 - Mathematical Reasoning
 - Logical Reasoning
 - Wikipedia Integration
@@ -43,6 +46,7 @@ A collection of practical Generative AI projects built while learning Large Lang
 - OpenAI
 - Ollama
 - Hugging Face
+- Astra DB
 - SQLAlchemy
 - SQLite
 - MySQL
