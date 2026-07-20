@@ -39,7 +39,7 @@ news_writing_task = Task(
         "containing a maximum of 10 well-structured, engaging news items per section."
     ),
     agent=news_writer,
-    tools=[tavily_tool],
+    tools=[],
     output_file="/data/daily_news_briefing.md",
     async_execution=False
 )
