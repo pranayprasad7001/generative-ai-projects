@@ -1,4 +1,3 @@
-from litellm import max_tokens
 from crewai import Agent, LLM
 from tools import tavily_tool
 from dotenv import load_dotenv
@@ -81,7 +80,7 @@ news_writer = Agent(
         "complex geopolitical shifts, tech breakthroughs, and breaking headlines at a single glance. "
         "You maintain a strictly informative, neutral, and authoritative journalistic tone."
     ),
-    tools=[tavily_tool], 
+    tools=[], 
     allow_delegation=False,
     llm=llm_2,
     max_rpm=20,

@@ -5,7 +5,8 @@ from agents import news_researcher, news_writer
 # News Research Task
 news_research_task = Task(
     description=(
-        "Execute targeted web searches using the Tavily tool to gather today's trending news. "
+        "Execute targeted web searches using the Tavily tool to gather the most recent "
+        "trending news as of {date}. "
         "You must find news covering exactly these 5 distinct categories:\n"
         "1. Breaking News\n"
         "2. India (National/Regional news)\n"

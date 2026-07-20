@@ -1,4 +1,5 @@
 import os
+from datetime import date
 from crewai import Crew, Process
 from agents import news_researcher, news_writer
 from tasks import news_research_task, news_writing_task
@@ -30,8 +31,11 @@ crew = Crew(
     embedder=hf_embedder
 )
 
+# Get the date in the format "Month Day, Year" (e.g., "July 20, 2026")
+today = date.today().strftime("%B %d, %Y")
+
 # Run the Crew
-result = crew.kickoff(inputs={'topic': 'How to evaluate a RAG system'})
+result = crew.kickoff(inputs={'date': today})
 
 # Print the result
 print(result)
