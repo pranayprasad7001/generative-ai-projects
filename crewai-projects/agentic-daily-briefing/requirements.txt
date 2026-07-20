@@ -1,0 +1,8 @@
+python-dotenv
+crewai
+crewai_tools
+crewai[litellm]
+langchain-huggingface
+sentence-transformers
+tavily-python
+langsmith
