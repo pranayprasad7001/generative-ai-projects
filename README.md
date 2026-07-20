@@ -1,8 +1,16 @@
 # Generative AI Projects
 
-A collection of Generative AI applications built while learning and applying LangChain, RAG, AI agents, and modern LLM tooling — one project at a time, from simple prompt-based chatbots to multi-tool agents and retrieval systems backed by different vector stores.
+A collection of Generative AI applications built while learning and applying LangChain, LangGraph, CrewAI, RAG, AI agents, and modern LLM tooling — one project at a time, from simple prompt-based chatbots to multi-agent systems and retrieval systems backed by different vector stores.
 
-Each project lives in its own folder under `langchain-projects/`, is independently deployable, and ships with its own README covering setup, tech stack, and how it works.
+Each project lives in its own folder, is independently deployable, and ships with its own README covering setup, tech stack, and how it works.
+
+---
+
+## Roadmap: Guardrails & Evals
+
+Projects in this repo are functional but, as of now, don't yet have systematic guardrails or evaluation harnesses on their outputs — e.g. validating that an agent's cited sources are real and specific, checking retrieval quality, or catching malformed/leaked output before it reaches a file or a user.
+
+I'm currently working through guardrails and evals as a dedicated topic. Once that's done, I'll retrofit the relevant patterns (function-based output validation, retry-on-failure, source/citation checks, basic eval sets) across every project here that needs them — not just new ones. This section will be updated as that lands.
 
 ---
 
@@ -20,12 +28,19 @@ Each project lives in its own folder under `langchain-projects/`, is independent
 | [Multi-language Code Assistant](langchain-projects/multi-language-code-assistant) | Local, fully offline coding assistant using Ollama and Gradio (two iterations, v1 basic → v2 improved UI) | Runs locally, not deployed |
 | [Q&A Chatbot with Groq](langchain-projects/qa-chatbot) | The original starter project — a lightweight prompt-template-based Q&A chatbot | [Demo](https://question-answer-chatbot-groq.streamlit.app) |
 
+### CrewAI Projects
+
+| Project | Description | Status |
+|---|---|---|
+| [Agentic Daily Briefing](crewai-projects/agentic-daily-briefing) | Multi-agent CrewAI crew (researcher + writer) that searches the web and compiles a categorized daily news briefing in Markdown | Working end-to-end; guardrails/evals on source citations still pending — see Roadmap above |
+
 ---
 
 ## What This Repo Covers
 
 - **Retrieval-Augmented Generation (RAG)** — with two different vector store backends (ChromaDB, Astra DB) and both Groq and Hugging Face-hosted models
 - **AI Agents** — tool-calling agents (web search) and ReAct agents (multi-tool: math, reasoning, Wikipedia)
+- **Multi-Agent Systems** — sequential CrewAI crews with distinct researcher/writer roles
 - **Conversational AI** — session-based chat history, history-aware retrieval for follow-ups
 - **SQL Agents** — natural language database querying with read-only safeguards and prompt-injection awareness
 - **Local LLMs** — an Ollama-based offline coding assistant, no external API dependency
@@ -38,15 +53,15 @@ Each project lives in its own folder under `langchain-projects/`, is independent
 
 **Languages & Core:** Python
 
-**LLM Frameworks:** LangChain, LangGraph
+**LLM Frameworks:** LangChain, LangGraph, CrewAI
 
-**Models / APIs:** Groq, Google Gemini, Hugging Face Inference API, Ollama (local)
+**Models / APIs:** Groq, Google Gemini, Hugging Face Inference API, NVIDIA API (NIM), Ollama (local)
 
 **Vector Stores:** ChromaDB, Astra DB
 
 **Interfaces:** Streamlit, Gradio
 
-**Other:** SQLAlchemy, Exa Search API, Wikipedia API, LangSmith
+**Other:** SQLAlchemy, Exa Search API, Tavily Search API, Wikipedia API, LangSmith
 
 ---
 
@@ -66,6 +81,9 @@ generative-ai-projects/
 │   ├── multi-language-code-assistant/
 │   └── qa-chatbot/
 │
+├── crewai-projects/
+│   └── agentic-daily-briefing/
+│
 ├── LICENSE
 └── README.md
 ```
@@ -78,16 +96,16 @@ Each project is self-contained. General pattern:
 
 ```bash
 git clone https://github.com/pranayprasad7001/generative-ai-projects.git
-cd generative-ai-projects/langchain-projects/<project-name>
+cd generative-ai-projects/<langchain-projects-or-crewai-projects>/<project-name>
 
 python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 pip install -r requirements.txt
-streamlit run app.py
+streamlit run app.py         # or: python crew_main.py for CrewAI projects
 ```
 
-Most projects need a Groq API key (free tier at [console.groq.com](https://console.groq.com/keys)); a few require additional credentials (Astra DB, Google Gemini, Exa) — see the individual project README for specifics.
+Most projects need a Groq API key (free tier at [console.groq.com](https://console.groq.com/keys)); a few require additional credentials (Astra DB, Google Gemini, Exa, NVIDIA API, Tavily) — see the individual project README for specifics.
 
 ---
 
