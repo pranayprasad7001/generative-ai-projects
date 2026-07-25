@@ -1,0 +1,16 @@
+streamlit
+langchain
+langchain-core
+langchain-community
+langchain-classic
+langchain_huggingface
+huggingface_hub
+langchain_astradb 
+pypdf
+python-dotenv
+langgraph
+sentence-transformers
+bs4
+wikipedia
+arxiv
+langchain-groq
