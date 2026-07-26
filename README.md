@@ -26,6 +26,7 @@ I'm currently working through guardrails and evals as a dedicated topic. Once th
 | [Research Paper Assistant (RAG)](langchain-projects/research-paper-assistant-rag) | RAG system for research papers with persistent Chroma storage and visible source chunks | [Demo](https://interactive-research-paper-assistant.streamlit.app) |
 | [Math & Reasoning Agent](langchain-projects/math-reasoning-agent) | ReAct agent that dynamically picks between a calculator, reasoning chain, and Wikipedia lookup | [Demo](https://math-reasoning-agent.streamlit.app/) |
 | [Multi-language Code Assistant](langchain-projects/multi-language-code-assistant) | Local, fully offline coding assistant using Ollama and Gradio (two iterations, v1 basic → v2 improved UI) | Runs locally, not deployed |
+| [Intelligent Query Router](langchain-projects/intelligent-query-router) | LangGraph agent that classifies each question and routes it to an Astra DB vectorstore, Wikipedia, or arXiv before generating a streamed, grounded answer | Runs locally, not deployed |
 | [Q&A Chatbot with Groq](langchain-projects/qa-chatbot) | The original starter project — a lightweight prompt-template-based Q&A chatbot | [Demo](https://question-answer-chatbot-groq.streamlit.app) |
 
 ### CrewAI Projects
@@ -40,6 +41,7 @@ I'm currently working through guardrails and evals as a dedicated topic. Once th
 
 - **Retrieval-Augmented Generation (RAG)** — with two different vector store backends (ChromaDB, Astra DB) and both Groq and Hugging Face-hosted models
 - **AI Agents** — tool-calling agents (web search) and ReAct agents (multi-tool: math, reasoning, Wikipedia)
+- **Dynamic Query Routing** — a LangGraph agent that classifies each question via structured LLM output and routes it between a private vectorstore, Wikipedia, and arXiv
 - **Multi-Agent Systems** — sequential CrewAI crews with distinct researcher/writer roles
 - **Conversational AI** — session-based chat history, history-aware retrieval for follow-ups
 - **SQL Agents** — natural language database querying with read-only safeguards and prompt-injection awareness
@@ -61,7 +63,7 @@ I'm currently working through guardrails and evals as a dedicated topic. Once th
 
 **Interfaces:** Streamlit, Gradio
 
-**Other:** SQLAlchemy, Exa Search API, Tavily Search API, Wikipedia API, LangSmith
+**Other:** SQLAlchemy, Exa Search API, Tavily Search API, Wikipedia API, arXiv API, LangSmith
 
 ---
 
@@ -79,6 +81,7 @@ generative-ai-projects/
 │   ├── research-paper-assistant-rag/
 │   ├── math-reasoning-agent/
 │   ├── multi-language-code-assistant/
+│   ├── intelligent-query-router/
 │   └── qa-chatbot/
 │
 ├── crewai-projects/
@@ -106,6 +109,8 @@ streamlit run app.py         # or: python crew_main.py for CrewAI projects
 ```
 
 Most projects need a Groq API key (free tier at [console.groq.com](https://console.groq.com/keys)); a few require additional credentials (Astra DB, Google Gemini, Exa, NVIDIA API, Tavily) — see the individual project README for specifics.
+
+> **Exception:** `intelligent-query-router` uses `uv` for dependency management and runs as a CLI app (`python main.py`), not Streamlit — see its own README for setup.
 
 ---
 
