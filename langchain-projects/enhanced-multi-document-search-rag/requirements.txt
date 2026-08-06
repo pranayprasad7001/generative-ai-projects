@@ -10,3 +10,5 @@ requests
 streamlit
 wikipedia
 langchain-huggingface
+unstructured
+langchain_experimental
