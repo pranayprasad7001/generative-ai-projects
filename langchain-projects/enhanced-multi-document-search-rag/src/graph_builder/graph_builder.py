@@ -1,7 +1,8 @@
 import logging
 from langgraph.graph import StateGraph, START, END
 from state.rag_state import RAGState
-from nodes.nodes import RAGNodes
+from nodes.react_node import RAGNodes
+from langgraph.checkpoint.memory import InMemorySaver
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,7 @@ class GraphBuilder:
         logger.info("Initializing GraphBuilder with retriever and LLM.")
         self.nodes = RAGNodes(retriever, llm)
         self.graph = None
+        self.checkpointer = InMemorySaver()
 
     def build_graph(self):
         """
@@ -41,7 +43,7 @@ class GraphBuilder:
         builder.add_edge("responder", END)
 
         # Compile the graph
-        self.graph = builder.compile()
+        self.graph = builder.compile(checkpointer=self.checkpointer)
         logger.info("StateGraph workflow successfully compiled.")
         return self.graph
 
@@ -61,6 +63,6 @@ class GraphBuilder:
 
         logger.info("Running RAG workflow for query: %s", repr(question))
         initial_state = RAGState(question=question)
-        result = self.graph.invoke(initial_state)
+        result = self.graph.invoke(initial_state, config={"configurable": {"thread_id": "default_thread"}})
         logger.info("RAG workflow run completed successfully.")
         return result

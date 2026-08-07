@@ -1,0 +1,2 @@
+This is a dummy plain text file.
+It contains test content for the TextLoader.

@@ -1,13 +1,14 @@
 import logging
+import hashlib
 from pathlib import Path
+from config.config import Config
 from typing import List, Union
 from langchain_classic.vectorstores import FAISS
+from langchain_astradb import AstraDBVectorStore
+from langchain_community.retrievers import BM25Retriever
+from langchain_classic.retrievers import EnsembleRetriever
 from langchain_classic.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -18,68 +19,114 @@ class VectorStoreManager:
         logger.info("Initializing VectorStoreManager with model: %s", model_name)
         self.model_name = model_name
         self.embeddings = HuggingFaceEmbeddings(model_name=self.model_name)
-        self.vectorstore = None
+        self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name="test_collection", token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
+        self.bm25_retriever = None
+        self.ensemble_retriever = None
         self.retriever = None
-    
-    def create_vectorstore(self, documents: List[Document]) -> FAISS:
+        self.documents = []
+
+    def _add_documents_to_vectorstore(self, split_docs: List[Document], vector_store: AstraDBVectorStore) -> AstraDBVectorStore:
         """
-        Create a FAISS vector store from documents
+          Embeds documents and prevents duplicates using deterministic hashing IDs.
+          Args:
+            split_docs: List[Document]: List of documents to embed
+            vector_store: AstraDBVectorStore: AstraDB vector store
+          Returns:
+            AstraDBVectorStore: AstraDB vector store
+        """
+        if not split_docs:
+            logger.error("No documents to embed")
+            raise ValueError("No documents to embed")
+        
+        vector_store_collection = vector_store.astra_env.collection
+        # Generate unique deterministic IDs based on content and source
+        ids = []
+        docs = []
+        for doc in split_docs:
+            source = doc.metadata.get("source", "")
+            content = doc.page_content
+            unique_string = f"{source}_{content}"
+            doc_id = hashlib.sha256(unique_string.encode("utf-8")).hexdigest()
+            
+            existing_doc = vector_store_collection.find_one(
+                filter={"_id": doc_id},
+                projection={"_id": True}
+            )
+
+            if existing_doc:
+                logger.info(f"Document with ID {doc_id} already exists. Skipping.")
+                continue
+            ids.append(doc_id)
+            docs.append(doc)
+
+        if docs:
+            vector_store.add_documents(docs, ids=ids)
+            logger.info(f"Processed {len(docs)} chunks into vectorstore safely!")
+        else:
+            logger.info("All documents already exist in the vectorstore.")
+        return vector_store
+
+    def create_vectorstore(self, documents: List[Document]) -> AstraDBVectorStore:
+        """
+        Create a AstraDB vector store from documents
         Args:
             documents (List[Document]): List of documents to create vector store from
         Returns:
-            FAISS: FAISS vector store
+            AstraDBVectorStore: AstraDB vector store
         """
-        if self.vectorstore is None:
-            logger.info("Creating FAISS vector store from %d documents...", len(documents))
-            self.vectorstore = FAISS.from_documents(documents, self.embeddings)
-            logger.info("FAISS vector store successfully created.")
+        if self.vectorstore is not None and len(documents) > 0:
+            logger.info("Adding %d documents to AstraDB vector store...", len(documents))
+            self.documents.extend(documents)
+            self.vectorstore = self._add_documents_to_vectorstore(documents, self.vectorstore)
+            logger.info("AstraDB vector store successfully updated.")
+        elif self.vectorstore is None:
+            logger.error("Cannot add documents; vectorstore is not initialized.")
+            raise ValueError("No vectorstore found, please create or load a vectorstore first.")
+        elif len(documents) == 0:
+            logger.error("Cannot add documents; no documents provided.")
+            raise ValueError("No documents provided to add to vectorstore.")
         return self.vectorstore
 
-    def save_vectorstore(self, directory: Union[str, Path]) -> None:
-        """
-        Save FAISS vector store to disk
-        Args:
-            directory (Union[str, Path]): Directory to save vector store to
-        """
-        if self.vectorstore is None:
-            logger.error("Attempted to save vector store, but self.vectorstore is None.")
-            raise ValueError("No vectorstore to save, please create vector store first.")
-        else:
-            logger.info("Saving FAISS vector store to directory: %s", directory)
-            self.vectorstore.save_local(str(directory))
-            logger.info("Vector store successfully saved.")
-
-    def load_vectorstore(self, directory: Union[str, Path]) -> FAISS:
-        """
-        Load FAISS vector store from disk
-        Args:
-            directory (Union[str, Path]): Directory to load vector store from
-        Returns:
-            FAISS: FAISS vector store
-        """
-        if os.path.exists(directory):
-            logger.info("Loading FAISS vector store from directory: %s", directory)
-            self.vectorstore = FAISS.load_local(str(directory), self.embeddings, allow_dangerous_deserialization=True)
-            logger.info("Vector store successfully loaded.")
-            return self.vectorstore
-        else:
-            logger.error("Vector store directory not found: %s", directory)
-            raise FileNotFoundError(f"Directory not found: {directory}")
-
-    def create_retriever(self, vectorstore: FAISS, k: int = 4, search_type: str = "similarity") :
+    def create_retriever(self, vectorstore: AstraDBVectorStore, k: int = 4, search_type: str = "similarity") -> EnsembleRetriever :
         """
         Create a retriever from vector store
         Args:
-            vectorstore (FAISS): FAISS vector store
+            vectorstore: AstraDBVectorStore 
             k (int): Number of documents to retrieve
             search_type (str): Type of search to perform, can be "similarity" or "mmr"
         Returns:
             Retriever: Retriever
         """
-        if self.retriever is None:
+        if self.ensemble_retriever is None:
+            if vectorstore is None:
+                logger.error("Cannot create retriever; vectorstore is not initialized.")
+                raise ValueError("No vectorstore found, please create or load a vectorstore first.")
             logger.info("Creating retriever with k=%d, search_type='%s'", k, search_type)
             self.retriever = vectorstore.as_retriever(search_type=search_type, search_kwargs={"k": k})
-        return self.retriever
+            
+            # Initialize BM25Retriever using processed documents
+            if self.documents:
+                self.bm25_retriever = BM25Retriever.from_documents(self.documents)
+            else:
+                logger.warning("No documents stored in VectorStoreManager to initialize BM25Retriever. Initializing with a placeholder document.")
+                placeholder_doc = Document(page_content="placeholder")
+                self.bm25_retriever = BM25Retriever.from_documents([placeholder_doc])
+                
+            self.bm25_retriever.k = k
+            self.ensemble_retriever = EnsembleRetriever(retrievers=[self.retriever, self.bm25_retriever], weights=[0.7, 0.3])
+            
+        return self.ensemble_retriever
+
+    def get_retriever(self, k: int = 4, search_type: str = "similarity") -> EnsembleRetriever:
+        """
+        Get the ensemble retriever, initializing it if necessary.
+        """
+        if self.ensemble_retriever is None:
+            if self.vectorstore is None:
+                logger.error("Cannot get retriever; vectorstore is not initialized.")
+                raise ValueError("No vectorstore found, please create or load a vectorstore first.")
+            self.create_retriever(self.vectorstore, k=k, search_type=search_type)
+        return self.ensemble_retriever
         
     def retrieve(self, query: str, k: int = 4, search_type: str = "similarity") -> List[Document]:
         """
@@ -91,13 +138,19 @@ class VectorStoreManager:
         Returns:
             List[Document]: List of documents
         """
-        if self.vectorstore is None:
-            logger.error("Cannot retrieve; vectorstore is not initialized.")
-            raise ValueError("No vectorstore found, please create or load a vectorstore first.")
-        if self.retriever is None:
+        if self.ensemble_retriever is None:
+            if self.vectorstore is None:
+                logger.error("Cannot retrieve; vectorstore is not initialized.")
+                raise ValueError("No vectorstore found, please create or load a vectorstore first.")
             self.create_retriever(self.vectorstore, k, search_type)
-        
+        if query is None or query == "":
+            logger.error("Cannot retrieve; query is None.")
+            raise ValueError("No query provided to retrieve documents for.")
         logger.info("Retrieving documents for query: %s (k=%d, search_type='%s')", repr(query), k, search_type)
-        results = self.retriever.invoke(query)
+        try:
+            results = self.ensemble_retriever.invoke(query)
+        except Exception as e:
+            logger.error("Error retrieving documents for query: %s", query)
+            raise e
         logger.info("Retrieved %d relevant documents.", len(results))
         return results

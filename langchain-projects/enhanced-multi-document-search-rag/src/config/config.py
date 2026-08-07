@@ -11,10 +11,14 @@ class Config:
     """Configuration class for RAG system"""
     
     # API Keys
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+    ASTRA_DB_API_KEY = os.getenv("ASTRA_DB_API_KEY")
+    ASTRA_DB_API_ENDPOINT = os.getenv("ASTRA_DB_API_ENDPOINT") or os.getenv("ASTRA_DB_ENDPOINT")
+    ASTRA_DB_API_REGION = os.getenv("ASTRA_DB_API_REGION")
     
     # Model Configuration
-    LLM_MODEL = "openai:gpt-4o"
+    LLM_MODEL = "groq:openai/gpt-oss-120b"
     
     # Document Processing
     CHUNK_SIZE = 500
@@ -29,5 +33,5 @@ class Config:
     @classmethod
     def get_llm(cls):
         """Initialize and return the LLM model"""
-        os.environ["OPENAI_API_KEY"] = cls.OPENAI_API_KEY
+        os.environ["GROQ_API_KEY"] = cls.GROQ_API_KEY
         return init_chat_model(cls.LLM_MODEL)

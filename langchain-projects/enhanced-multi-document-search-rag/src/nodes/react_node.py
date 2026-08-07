@@ -1,5 +1,9 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
+import builtins
+import uuid
+builtins.uuid = uuid
+
 from typing import List, Optional
 from state.rag_state import RAGState
 from langchain_classic.schema import Document
@@ -85,7 +89,7 @@ class RAGNodes:
             "Return only the final useful answer."
         )
 
-        self._agent = create_agent(llm=self.llm, tools=tools, system_prompt=system_prompt)
+        self._agent = create_agent(model=self.llm, tools=tools, system_prompt=system_prompt)
 
     def generate_response(self, state: RAGState) -> RAGState:
         """

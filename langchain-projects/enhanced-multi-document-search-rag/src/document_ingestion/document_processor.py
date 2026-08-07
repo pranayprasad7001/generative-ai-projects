@@ -292,14 +292,3 @@ class DocumentProcessor:
         
         logger.info("Document loading pipeline finished. Total chunks created: %d", len(docs))
         return docs
-
-    def load_and_split(self, sources: List[str], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
-        """
-        Load documents from sources and split them into chunks
-        Args:
-            sources (List[str]): List of sources to load documents from
-            strategy (str): Chunking strategy to use
-        Returns:
-            List[Document]: List of split documents
-        """
-        return self.load_documents(sources, strategy=strategy)
