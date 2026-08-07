@@ -2,7 +2,6 @@ langchain
 langchain-community
 langchain-groq
 langgraph
-faiss-cpu
 pydantic
 python-dotenv
 bs4
@@ -19,3 +18,5 @@ docx2txt
 openpyxl
 markdown
 msoffcrypto-tool
+langchain-cohere
+cohere
