@@ -12,3 +12,10 @@ wikipedia
 langchain-huggingface
 unstructured
 langchain_experimental
+langchain_astradb
+rank_bm25
+pymupdf
+docx2txt
+openpyxl
+markdown
+msoffcrypto-tool
