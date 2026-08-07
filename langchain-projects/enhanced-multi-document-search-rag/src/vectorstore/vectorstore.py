@@ -1,9 +1,8 @@
 import logging
 import hashlib
-from pathlib import Path
 from config.config import Config
-from typing import List, Union
-from langchain_classic.vectorstores import FAISS
+from typing import List
+from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever
@@ -15,15 +14,18 @@ logger = logging.getLogger(__name__)
 class VectorStoreManager:
     """Manages FAISS vector stores with HuggingFace embeddings"""
     
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
-        logger.info("Initializing VectorStoreManager with model: %s", model_name)
-        self.model_name = model_name
-        self.embeddings = HuggingFaceEmbeddings(model_name=self.model_name)
-        self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name="test_collection", token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
+    def __init__(self, embedding_model: str = Config.EMBEDDING_MODEL):
+        logger.info("Initializing VectorStoreManager with embedding model: %s", embedding_model)
+        self.embedding_model = embedding_model
+        self.embeddings = HuggingFaceEmbeddings(model_name=self.embedding_model)
+        self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name=Config.ASTRA_DB_COLLECTION_NAME, token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
         self.bm25_retriever = None
         self.ensemble_retriever = None
         self.retriever = None
         self.documents = []
+        self._current_k = None
+        self._current_search_type = None
+        self.cohere_reranker = CohereRerank(model=Config.COHERE_RERANKER_MODEL, top_n=Config.COHERE_RERANKER_TOP_N)
 
     def _add_documents_to_vectorstore(self, split_docs: List[Document], vector_store: AstraDBVectorStore) -> AstraDBVectorStore:
         """
@@ -97,7 +99,7 @@ class VectorStoreManager:
         Returns:
             Retriever: Retriever
         """
-        if self.ensemble_retriever is None:
+        if self.ensemble_retriever is None or self._current_k != k or self._current_search_type != search_type:
             if vectorstore is None:
                 logger.error("Cannot create retriever; vectorstore is not initialized.")
                 raise ValueError("No vectorstore found, please create or load a vectorstore first.")
@@ -114,14 +116,42 @@ class VectorStoreManager:
                 
             self.bm25_retriever.k = k
             self.ensemble_retriever = EnsembleRetriever(retrievers=[self.retriever, self.bm25_retriever], weights=[0.7, 0.3])
+            self._current_k = k
+            self._current_search_type = search_type
             
         return self.ensemble_retriever
+    
+    def rerank_documents(self, query: str, documents: List[Document]) -> List[Document]:
+        """
+        Rerank documents based on query
+        Args:
+            query (str): Query to rerank documents for
+            documents (List[Document]): List of documents to rerank
+        Returns:
+            List[Document]: Reranked list of documents
+        """
+        if not query or not query.strip():
+            raise ValueError("No query provided.")
+        if not documents:
+            logger.info("No documents to rerank.")
+            return []
+        if len(documents) == 1:
+            logger.info("Only one document retrieved. Skipping reranking.")
+            return documents
+
+        try:
+            reranked = self.cohere_reranker.compress_documents(documents=documents, query=query)
+            logger.info("Reranked %d candidate documents into %d documents.", len(documents), len(reranked))
+            return reranked
+        except Exception:
+            logger.exception("Failed to rerank. Returning original documents.")
+            return documents
 
     def get_retriever(self, k: int = 4, search_type: str = "similarity") -> EnsembleRetriever:
         """
         Get the ensemble retriever, initializing it if necessary.
         """
-        if self.ensemble_retriever is None:
+        if self.ensemble_retriever is None or self._current_k != k or self._current_search_type != search_type:
             if self.vectorstore is None:
                 logger.error("Cannot get retriever; vectorstore is not initialized.")
                 raise ValueError("No vectorstore found, please create or load a vectorstore first.")
@@ -138,7 +168,7 @@ class VectorStoreManager:
         Returns:
             List[Document]: List of documents
         """
-        if self.ensemble_retriever is None:
+        if self.ensemble_retriever is None or self._current_k != k or self._current_search_type != search_type:
             if self.vectorstore is None:
                 logger.error("Cannot retrieve; vectorstore is not initialized.")
                 raise ValueError("No vectorstore found, please create or load a vectorstore first.")
@@ -153,4 +183,5 @@ class VectorStoreManager:
             logger.error("Error retrieving documents for query: %s", query)
             raise e
         logger.info("Retrieved %d relevant documents.", len(results))
-        return results
+        reranked_docs = self.rerank_documents(query, results)
+        return reranked_docs
