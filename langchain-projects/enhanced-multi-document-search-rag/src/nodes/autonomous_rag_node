@@ -17,6 +17,7 @@ from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
 from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from typing import Literal
+from config.mcp_config import MCPToolManager
 
 class _ToolUse(BaseModel):
     """Schema representing the routing decision and justification from the query analyzer."""
@@ -39,6 +40,7 @@ class RAGNodes:
         self.llm = llm
         self._web_search_agent = None
         self._vector_search_agent = None
+        self.mcp_manager = MCPToolManager()
 
     def query_analyzer(self, state: RAGState) -> RAGState:
         """
@@ -133,7 +135,7 @@ class RAGNodes:
         else:
             return "none_search"
 
-    def external_search(self, state: RAGState) -> RAGState:
+    async def external_search(self, state: RAGState) -> RAGState:
         """
         Perform external search to find relevant information
 
@@ -195,34 +197,7 @@ class RAGNodes:
             based on the retrieved information.
         """
 
-        wikipedia = WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper(top_k_results=3, lang='en', doc_content_chars_max=1000))
-
-        wikipedia_tool = Tool(
-            name='wikipedia',
-            func=wikipedia.run,
-            description='Use this tool to search for general knowledge information search from online wikipedia encyclopedia. Returns up to 3 best matching documents.'
-        )
-
-        tools = [wikipedia_tool]
-        
-        tavily_api_key = os.environ.get("TAVILY_API_KEY")
-        if tavily_api_key:
-            tavily_search = TavilySearch(max_results=3, topic="general")
-            tavily_tool = Tool(
-                name='tavily_search',
-                func=tavily_search.run,
-                description='Use this tool to search for general knowledge information search on the web. Returns up to 3 best matching documents.'
-            )
-            tools.append(tavily_tool)
-            
-        arxiv_search = ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=3, doc_content_chars_max=1000))
-
-        arxiv_tool = Tool(
-            name='arxiv_search',
-            func=arxiv_search.run,
-            description='Use this tool to search for research papers information search on the arxiv. Returns up to 3 best matching documents.'
-        )
-        tools.append(arxiv_tool)
+        tools = await self.mcp_manager.get_tools()
 
         if self._web_search_agent is None:
             self._web_search_agent = create_agent(
@@ -231,7 +206,7 @@ class RAGNodes:
                 tools=tools
             )
 
-        response = self._web_search_agent.invoke({
+        response = await self._web_search_agent.ainvoke({
             "messages": [
                 ("user", state.question)
             ]

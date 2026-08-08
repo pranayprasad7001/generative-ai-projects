@@ -13,6 +13,7 @@ class Config:
     # API Key
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
 
     ASTRA_DB_API_KEY = os.getenv("ASTRA_DB_API_KEY")
     ASTRA_DB_API_ENDPOINT = os.getenv("ASTRA_DB_API_ENDPOINT") or os.getenv("ASTRA_DB_ENDPOINT")
