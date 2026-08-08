@@ -1,29 +1,38 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
 from pydantic import BaseModel, Field
-import os
-import builtins
-import uuid
-builtins.uuid = uuid
-from langchain_tavily import TavilySearch
-from typing import List, Optional
-from state.auto_state import RAGState
+from typing import List
+from state.adaptive_state import RAGState
 from langchain_classic.schema import Document
-from langchain_core.tools import Tool
-from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
-from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
-from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from typing import Literal
 from config.mcp_config import MCPToolManager
+
+MAX_REWRITES = 2
 
 class _ToolUse(BaseModel):
     """Schema representing the routing decision and justification from the query analyzer."""
     tool_type: Literal["vector_search", "external", "none"] = Field(..., description="Tool type to use")
     analysis: str = Field(..., description="Analysis of the tool to use")
 
+class RetrievalGrade(BaseModel):
+    grade: Literal["yes", "no"] = Field(
+        description="Whether the retrieved documents are relevant and sufficient."
+    )
+
+    reasoning: str = Field(
+        description="Concise explanation for the grading decision."
+    )
+
+class QuestionRewrite(BaseModel):
+    rewritten_question: str = Field(
+        description="Improved retrieval-focused version of the question."
+    )
+
+    reasoning: str = Field(
+        description="Brief explanation of why the rewrite should improve retrieval."
+    )
 
 class RAGNodes:
     """Contains node functions for RAG workflow"""
@@ -39,7 +48,6 @@ class RAGNodes:
         self.retriever = retriever
         self.llm = llm
         self._web_search_agent = None
-        self._vector_search_agent = None
         self.mcp_manager = MCPToolManager()
 
     def query_analyzer(self, state: RAGState) -> RAGState:
@@ -270,67 +278,179 @@ class RAGNodes:
         state.answer = response.content
         return state
 
-
     def vector_search(self, state: RAGState) -> RAGState:
-        """
-        Perform vector search to find relevant documents
+        """Perform vector search to find relevant documents."""
 
-        Args:
-            state: Current RAG state
-
-        Returns:
-            Updated RAG state with retrieved documents
-        """
-        retrieved_documents = []
-        
-        def retriever_tool(query: str) -> str:
-            docs: List[Document] = self.retriever.invoke(query)
-            retrieved_documents.extend(docs)
-            if not docs:
-                return "No documents found."
-            merged = []
-
-            for i, d in enumerate(docs[:5], start=1):
-                meta = d.metadata if hasattr(d, "metadata") else {}
-                title = meta.get("title") or meta.get("source") or f"doc_{i}"
-                merged.append(f"[{i}] {title}\n{d.page_content}") 
-            return "\n\n".join(merged)
-
-        retriever_tool = Tool(
-            name='retriever',
-            func=retriever_tool,
-            description='Use this tool to search for documents relevant to the user query. Returns up to 4 best matching documents.'
-        )
-        
-        system_prompt = """
-            You are a retrieval-augmented generation assistant.
-            Your task is to answer the user's question by searching and retrieving information from the local documents using the 'retriever' tool.
-            
-            Guidelines:
-            1. Use the 'retriever' tool to fetch relevant context from the local documents.
-            2. Base your final answer strictly on the retrieved context. If the answer cannot be found in the documents, state that you do not have that information.
-            3. Do not assume or extrapolate beyond the retrieved facts.
-            
-            Provide only the final clear answer.
-        """
-        
-        if self._vector_search_agent is None:
-            self._vector_search_agent = create_agent(
-                self.llm,
-                system_prompt=system_prompt,
-                tools=[retriever_tool]
-            )
-
-        response = self._vector_search_agent.invoke({
-            "messages": [
-                ("user", state.question)
-            ]
-        })
-        
-        messages = response.get("messages", [])
-        answer = messages[-1].content if messages else response.get("output", "")
-        
+        retrieved_documents: List[Document] = self.retriever.invoke(state.question)
         state.retrieved_docs = retrieved_documents
-        state.answer = answer
         return state
 
+    def grader(self, state: RAGState) -> RAGState:
+        """Grade the relevance and sufficiency of retrieved documents."""
+
+        system_prompt = """
+            You are a document relevance grader in an autonomous RAG system.
+
+            Your task is to evaluate whether the documents retrieved from the local
+            knowledge base are relevant and sufficient to answer the user's question.
+
+            You will receive:
+            1. The user's question.
+            2. The documents retrieved from the local knowledge base.
+
+            Evaluate the retrieved documents using the following criteria:
+
+            1. Relevance:
+            Determine whether the retrieved documents contain information directly
+            related to the user's question.
+
+            2. Sufficiency:
+            Determine whether the retrieved documents contain enough information
+            to reasonably answer the question.
+
+            3. Grounding:
+            Determine whether the documents provide factual evidence that can be
+            used to support an answer.
+
+            Decision rules:
+
+            - Return "yes" if the retrieved documents are relevant and contain
+              sufficient information to answer the question.
+            - Return "no" if the documents are irrelevant, unrelated, empty, or
+              insufficient to answer the question.
+            - If only some documents are relevant but the relevant information is
+              sufficient to answer the question, return "yes".
+            - If the retrieved documents contain only partial or weakly related
+              information and an accurate answer cannot reasonably be generated,
+              return "no".
+
+            Important instructions:
+
+            - Do not answer the user's question.
+            - Do not use your own general knowledge to fill missing information.
+            - Judge only the retrieved documents against the user's question.
+            - Focus on whether the retrieved context is good enough for the next
+              generation step.
+
+            Return your evaluation in the following structured format:
+
+            grade: "yes" | "no"
+            reasoning: "Concise explanation of why the retrieved documents are or are
+                        not sufficient."
+        """
+
+        prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        (
+            "human",
+            """
+            User Question:
+            {question}
+
+            Retrieved Documents:
+            {documents}
+            """
+        )])
+
+        documents = "\n\n".join(
+            f"[Document {i}]\n{doc.page_content}"
+            for i, doc in enumerate(state.retrieved_docs, start=1)
+        )
+
+        response = self.llm.with_structured_output(RetrievalGrade).invoke(prompt.format_messages(
+                question=state.question,
+                documents=documents
+            )
+        )
+
+        state.grade = response.grade
+        state.analysis = response.reasoning
+
+        return state
+
+    def grader_router(self, state: RAGState) -> str:
+        """
+        Route to next node based on grader output
+        """
+        if state.grade == "yes":
+            return "generate"
+        if state.rewrite_count >= MAX_REWRITES: # TODO : after max tries, fall back to external search
+            return "generate"
+        return "rewriter"
+    
+    def rewriter(self, state: RAGState) -> RAGState:
+        """
+        Rewrite the user's question to improve retrieval accuracy
+        """
+        system_prompt = """
+        You are a question rewriter in an autonomous RAG system.
+
+        Your task is to rewrite the user's question so that it is more likely to
+        retrieve relevant information from the internal knowledge base.
+
+        The previous retrieval attempt was judged insufficient or irrelevant.
+
+        You will receive:
+        1. The original user question.
+        2. The current version of the question used for retrieval.
+
+        Your goal is to improve the retrieval query while preserving the user's
+        original intent.
+
+        Rewrite guidelines:
+
+        1. Preserve the exact meaning and intent of the user's question.
+        2. Identify the key concepts, entities, topics, and relationships that are
+           important for retrieval.
+        3. Make vague or ambiguous wording more precise when the intended meaning
+           can be inferred from the original question.
+        4. Expand acronyms or abbreviations when their meaning is clear from the
+           question.
+        5. Replace conversational or indirect wording with clear, retrieval-friendly
+           terminology.
+        6. Include important keywords from the original question that may improve
+           semantic or keyword matching.
+        7. If the question contains multiple concepts, restructure it so the
+           relationship between those concepts is explicit.
+        8. Do not introduce facts, entities, assumptions, or context that are not
+           supported by the original question.
+        9. Do not change the scope of the question.
+        10. Do not answer the question.
+        11. Keep the rewritten question concise, preferably one or two sentences.
+        12. If the current question is already an effective retrieval query, return
+            it unchanged.
+
+        The purpose of the rewrite is to improve document retrieval, not to make the
+        question more elaborate.
+
+        Return the result in the following structured format:
+
+        rewritten_question: "Improved retrieval-focused version of the question"
+        reasoning: "Brief explanation of what was changed and why it should improve retrieval"
+        """
+
+        prompt = ChatPromptTemplate.from_messages([
+        ("system", system_prompt),
+        (
+            "human",
+            """
+            Original Question:
+            {original_question}
+
+            Current Question:
+            {current_question}
+            """
+        )])
+
+        response = self.llm.with_structured_output(QuestionRewrite).invoke(
+            prompt.format_messages(
+                original_question=state.original_question,
+                current_question=state.question,
+            )
+        )
+
+        state.question = response.rewritten_question
+        state.analysis = response.reasoning
+        state.rewrite_count += 1
+
+        return state

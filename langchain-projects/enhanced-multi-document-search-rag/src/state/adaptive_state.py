@@ -13,6 +13,11 @@ class RAGState(BaseModel):
         description="Conversation and tool messages."
     )
 
+    original_question: str = Field(
+        default="",
+        description="Original question from the user."
+    )
+
     question: str = Field(
         ...,
         description="User's current question."
@@ -41,4 +46,9 @@ class RAGState(BaseModel):
     answer: str = Field(
         default="",
         description="Final answer generated for the user."
+    )
+
+    rewrite_count: int = Field(
+        default=0,
+        description="Number of times the question has been rewritten."
     )
