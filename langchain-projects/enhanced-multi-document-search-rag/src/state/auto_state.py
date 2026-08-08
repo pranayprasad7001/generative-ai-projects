@@ -1,14 +1,44 @@
-"""RAG State Definition for LangGraph"""
+from typing import Literal
 
-from typing import List, Literal
-from pydantic import BaseModel
-from langchain_classic.schema import Document
+from pydantic import BaseModel, Field
+from langchain_core.documents import Document
+from langchain_core.messages import BaseMessage
 
 
 class RAGState(BaseModel):
-    """State object for RAG workflow"""
-    question: str
-    analysis: str = ""
-    tool_type: Literal["vector_search", "external", "none"]
-    retrieved_docs: List[Document] = []
-    answer: str = ""
+    """State for the autonomous RAG workflow."""
+
+    messages: list[BaseMessage] = Field(
+        default_factory=list,
+        description="Conversation and tool messages."
+    )
+
+    question: str = Field(
+        ...,
+        description="User's current question."
+    )
+
+    analysis: str = Field(
+        default="",
+        description="Analysis of the user's question."
+    )
+
+    tool_type: Literal["vector_search", "external", "none"] | None = Field(
+        default=None,
+        description="Retrieval strategy selected for the question."
+    )
+
+    retrieved_docs: list[Document] = Field(
+        default_factory=list,
+        description="Documents retrieved from the vector store."
+    )
+
+    external_results: str = Field(
+        default="",
+        description="Results retrieved from external search tools."
+    )
+
+    answer: str = Field(
+        default="",
+        description="Final answer generated for the user."
+    )

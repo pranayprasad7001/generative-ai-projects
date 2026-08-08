@@ -1,6 +1,7 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+import os
 import builtins
 import uuid
 builtins.uuid = uuid
@@ -9,18 +10,18 @@ from typing import List, Optional
 from state.auto_state import RAGState
 from langchain_classic.schema import Document
 from langchain_core.tools import Tool
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 from langchain.agents import create_agent
-from langchain.prompt import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_community.utilities import WikipediaAPIWrapper, ArxivAPIWrapper
 from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
 from langchain_community.tools.arxiv.tool import ArxivQueryRun
 from typing import Literal
 
 class _ToolUse(BaseModel):
-    """Tool use structure"""
-    tool_type: Literal["vector_search", "external", "none"]
-    analysis: str
+    """Schema representing the routing decision and justification from the query analyzer."""
+    tool_type: Literal["vector_search", "external", "none"] = Field(..., description="Tool type to use")
+    analysis: str = Field(..., description="Analysis of the tool to use")
 
 
 class RAGNodes:
@@ -38,7 +39,6 @@ class RAGNodes:
         self.llm = llm
         self._web_search_agent = None
         self._vector_search_agent = None
-
 
     def query_analyzer(self, state: RAGState) -> RAGState:
         """
@@ -112,14 +112,11 @@ class RAGNodes:
             prompt.format_messages(question=state.question)
         )
 
-        return RAGState(
-            question=state.question,
-            analysis=response.analysis,
-            tool_type=response.tool_type
-        )
+        state.analysis = response.analysis
+        state.tool_type = response.tool_type
+        return state
 
-
-    def query_router(self, state: RAGState) -> RAGState:
+    def query_router(self, state: RAGState) -> str:
         """
         Routes the query to the appropriate tool based on the analysis
 
@@ -129,12 +126,12 @@ class RAGNodes:
         Returns:
             Updated RAG state with routed query
         """
-        if state.tool_use == "vector_search":
+        if state.tool_type == "vector_search":
             return "vector_search"
-        elif state.tool_use == "external":
+        elif state.tool_type == "external":
             return "external_search"
         else:
-            return "none"
+            return "none_search"
 
     def external_search(self, state: RAGState) -> RAGState:
         """
@@ -206,14 +203,18 @@ class RAGNodes:
             description='Use this tool to search for general knowledge information search from online wikipedia encyclopedia. Returns up to 3 best matching documents.'
         )
 
-        tavily_search = TavilySearch(max_results=3, topic="general")
+        tools = [wikipedia_tool]
         
-        tavily_tool = Tool(
-            name='tavily_search',
-            func=tavily_search.run,
-            description='Use this tool to search for general knowledge information search on the web. Returns up to 3 best matching documents.'
-        )
-        
+        tavily_api_key = os.environ.get("TAVILY_API_KEY")
+        if tavily_api_key:
+            tavily_search = TavilySearch(max_results=3, topic="general")
+            tavily_tool = Tool(
+                name='tavily_search',
+                func=tavily_search.run,
+                description='Use this tool to search for general knowledge information search on the web. Returns up to 3 best matching documents.'
+            )
+            tools.append(tavily_tool)
+            
         arxiv_search = ArxivQueryRun(api_wrapper=ArxivAPIWrapper(top_k_results=3, doc_content_chars_max=1000))
 
         arxiv_tool = Tool(
@@ -221,16 +222,13 @@ class RAGNodes:
             func=arxiv_search.run,
             description='Use this tool to search for research papers information search on the arxiv. Returns up to 3 best matching documents.'
         )
+        tools.append(arxiv_tool)
 
         if self._web_search_agent is None:
             self._web_search_agent = create_agent(
                 self.llm,
                 system_prompt=system_prompt,
-                tools=[
-                    wikipedia_tool,
-                    tavily_tool,
-                    arxiv_tool
-                ]
+                tools=tools
             )
 
         response = self._web_search_agent.invoke({
@@ -238,13 +236,13 @@ class RAGNodes:
                 ("user", state.question)
             ]
         })
-
-        return RAGState(
-            question=state.question,
-            analysis=state.analysis,
-            tool_use=state.tool_use,
-            documents=self._web_search_agent.invoke({"messages": [HumanMessage(content=state.question)]})
-        )
+        
+        messages = response.get("messages", [])
+        answer = messages[-1].content if messages else response.get("output", "")
+        
+        state.external_results = answer
+        state.answer = answer
+        return state
 
     def none_search(self, state: RAGState) -> RAGState:
         """
@@ -256,7 +254,46 @@ class RAGNodes:
         Returns:
             Updated RAG state with retrieved information
         """
-        pass
+        system_prompt = """
+            You are the direct-answering component of an autonomous RAG system.
+
+            The user's question has already been classified as not requiring any
+            retrieval from the vector store or external search tools.
+
+            Your task is to answer the user's question directly using the information
+            available in the conversation and your general knowledge.
+
+            Guidelines:
+
+            1. Do not perform any vector search.
+            2. Do not use external search tools.
+            3. Do not invent facts or sources.
+            4. Answer clearly and directly.
+            5. If the user is greeting, thanking, or engaging in casual conversation,
+               respond naturally and conversationally.
+            6. If the question is a simple factual or conceptual question that does not
+               require retrieval, provide a concise and accurate explanation.
+            7. If the question cannot be answered reliably without additional
+               information, clearly state what information is missing instead of
+               fabricating an answer.
+            8. Match the level of detail to the user's question.
+
+            Return only the final answer to the user's question.
+        """
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "{question}")
+        ])
+
+        response = self.llm.invoke(
+            prompt.format_messages(
+                question=state.question
+            )
+        )
+
+        state.answer = response.content
+        return state
 
 
     def vector_search(self, state: RAGState) -> RAGState:
@@ -269,10 +306,56 @@ class RAGNodes:
         Returns:
             Updated RAG state with retrieved documents
         """
-        retrieved_docs = self.retriever.invoke(state.question)
-        return RAGState(
-            question=state.question,
-            analysis=state.analysis,
-            tool_use=state.tool_use,
-            documents=retrieved_docs
+        retrieved_documents = []
+        
+        def retriever_tool(query: str) -> str:
+            docs: List[Document] = self.retriever.invoke(query)
+            retrieved_documents.extend(docs)
+            if not docs:
+                return "No documents found."
+            merged = []
+
+            for i, d in enumerate(docs[:5], start=1):
+                meta = d.metadata if hasattr(d, "metadata") else {}
+                title = meta.get("title") or meta.get("source") or f"doc_{i}"
+                merged.append(f"[{i}] {title}\n{d.page_content}") 
+            return "\n\n".join(merged)
+
+        retriever_tool = Tool(
+            name='retriever',
+            func=retriever_tool,
+            description='Use this tool to search for documents relevant to the user query. Returns up to 4 best matching documents.'
         )
+        
+        system_prompt = """
+            You are a retrieval-augmented generation assistant.
+            Your task is to answer the user's question by searching and retrieving information from the local documents using the 'retriever' tool.
+            
+            Guidelines:
+            1. Use the 'retriever' tool to fetch relevant context from the local documents.
+            2. Base your final answer strictly on the retrieved context. If the answer cannot be found in the documents, state that you do not have that information.
+            3. Do not assume or extrapolate beyond the retrieved facts.
+            
+            Provide only the final clear answer.
+        """
+        
+        if self._vector_search_agent is None:
+            self._vector_search_agent = create_agent(
+                self.llm,
+                system_prompt=system_prompt,
+                tools=[retriever_tool]
+            )
+
+        response = self._vector_search_agent.invoke({
+            "messages": [
+                ("user", state.question)
+            ]
+        })
+        
+        messages = response.get("messages", [])
+        answer = messages[-1].content if messages else response.get("output", "")
+        
+        state.retrieved_docs = retrieved_documents
+        state.answer = answer
+        return state
+
