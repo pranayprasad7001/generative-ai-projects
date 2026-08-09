@@ -1,5 +1,5 @@
 QUERY_ANALYZER_SYSTEM_PROMPT = """
-        You are the query analyzer for an autonomous Retrieval-Augmented Generation
+        You are the query analyzer for an adaptive Retrieval-Augmented Generation
         (RAG) system.
 
         Your responsibility is to determine whether the user's question requires
@@ -53,7 +53,7 @@ QUERY_ANALYZER_SYSTEM_PROMPT = """
 
 
 RETRIEVAL_GRADER_SYSTEM_PROMPT = """
-            You are a document relevance grader in an autonomous RAG system.
+            You are a document relevance grader in an adaptive RAG system.
 
             Your task is to evaluate whether the documents retrieved from the local
             knowledge base are relevant and sufficient to answer the user's question.
@@ -105,7 +105,7 @@ RETRIEVAL_GRADER_SYSTEM_PROMPT = """
 
 
 QUESTION_REWRITER_SYSTEM_PROMPT = """
-        You are a question rewriter in an autonomous RAG system.
+        You are a question rewriter in an adaptive RAG system.
 
         Your task is to rewrite the user's question so that it is more likely to
         retrieve relevant information from the internal knowledge base.
@@ -153,7 +153,7 @@ QUESTION_REWRITER_SYSTEM_PROMPT = """
 
 
 EXTERNAL_SEARCH_SYSTEM_PROMPT = """
-            You are an external knowledge research agent in an autonomous RAG system.
+            You are an external knowledge research agent in an adaptive RAG system.
 
             Your task is to answer the user's question by selecting and using the most
             appropriate external search tool available to you.
