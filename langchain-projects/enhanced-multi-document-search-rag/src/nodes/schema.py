@@ -3,7 +3,7 @@ from typing import Literal
 
 class ToolUse(BaseModel):      
     """Schema representing the routing decision and justification from the query analyzer."""
-    tool_type: Literal["vector_search", "external", "none"] = Field(..., description="Tool type to use")
+    tool_type: Literal["vector_search", "external_search"] = Field(..., description="Tool type to use")
     analysis: str = Field(..., description="Analysis of the tool to use")
 
 class RetrievalGrade(BaseModel):  

@@ -15,8 +15,6 @@ from prompts.rag_prompts import (
     EXTERNAL_SEARCH_SYSTEM_PROMPT,
 )
 
-MAX_REWRITES = Config.MAX_REWRITES
-
 class RAGNodes:
     """Contains node functions for RAG workflow"""
 
@@ -69,10 +67,13 @@ class RAGNodes:
         """
         if state.tool_type == "vector_search":
             return "vector_search"
-        elif state.tool_type == "external":
+
+        if state.tool_type == "external_search":
             return "external_search"
-        else:
-            return "none_search"
+
+        raise ValueError(
+            f"Invalid tool_type: {state.tool_type}"
+        )
 
     async def external_search(self, state: RAGState) -> RAGState:
         """
@@ -105,57 +106,6 @@ class RAGNodes:
         
         state.external_results = answer
         state.answer = answer
-        return state
-
-    def none_search(self, state: RAGState) -> RAGState: # TODO: Remove direct answering, web_search agent will suffice
-        """
-        Perform none search to find relevant information
-
-        Args:
-            state: Current RAG state
-
-        Returns:
-            Updated RAG state with retrieved information
-        """
-        system_prompt = """
-            You are the direct-answering component of an autonomous RAG system.
-
-            The user's question has already been classified as not requiring any
-            retrieval from the vector store or external search tools.
-
-            Your task is to answer the user's question directly using the information
-            available in the conversation and your general knowledge.
-
-            Guidelines:
-
-            1. Do not perform any vector search.
-            2. Do not use external search tools.
-            3. Do not invent facts or sources.
-            4. Answer clearly and directly.
-            5. If the user is greeting, thanking, or engaging in casual conversation,
-               respond naturally and conversationally.
-            6. If the question is a simple factual or conceptual question that does not
-               require retrieval, provide a concise and accurate explanation.
-            7. If the question cannot be answered reliably without additional
-               information, clearly state what information is missing instead of
-               fabricating an answer.
-            8. Match the level of detail to the user's question.
-
-            Return only the final answer to the user's question.
-        """
-
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{question}")
-        ])
-
-        response = self.llm.invoke(
-            prompt.format_messages(
-                question=state.question
-            )
-        )
-
-        state.answer = response.content
         return state
 
     def vector_search(self, state: RAGState) -> RAGState:
@@ -203,7 +153,7 @@ class RAGNodes:
         """
         if state.grade == "yes":
             return "generate"
-        if state.rewrite_count >= MAX_REWRITES: # TODO : after max tries, fallback to external search
+        if state.rewrite_count >= Config.MAX_REWRITES: # TODO : after max tries, fallback to external search
             return "generate"
         return "rewriter"
     
