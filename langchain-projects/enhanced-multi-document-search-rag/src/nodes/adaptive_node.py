@@ -43,10 +43,9 @@ class RAGNodes:
         Returns:
             Updated RAG state with analysis and which tool to use
         """
-        system_prompt = QUERY_ANALYZER_SYSTEM_PROMPT
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
+            ("system", QUERY_ANALYZER_SYSTEM_PROMPT),
             ("human", "{question}")
         ])
 
@@ -85,15 +84,13 @@ class RAGNodes:
         Returns:
             Updated RAG state with retrieved information
         """
-        
-        system_prompt = EXTERNAL_SEARCH_SYSTEM_PROMPT
 
         tools = await self.mcp_manager.get_tools()
 
         if self._web_search_agent is None:
             self._web_search_agent = create_agent(
                 self.llm,
-                system_prompt=system_prompt,
+                system_prompt=EXTERNAL_SEARCH_SYSTEM_PROMPT,
                 tools=tools
             )
 
@@ -171,10 +168,8 @@ class RAGNodes:
     def grader(self, state: RAGState) -> RAGState:
         """Grade the relevance and sufficiency of retrieved documents."""
 
-        system_prompt = RETRIEVAL_GRADER_SYSTEM_PROMPT
-
         prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
+        ("system", RETRIEVAL_GRADER_SYSTEM_PROMPT),
         (
             "human",
             """
@@ -216,10 +211,9 @@ class RAGNodes:
         """
         Rewrite the user's question to improve retrieval accuracy
         """
-        system_prompt = QUESTION_REWRITER_SYSTEM_PROMPT
 
         prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
+        ("system", QUESTION_REWRITER_SYSTEM_PROMPT),
         (
             "human",
             """
