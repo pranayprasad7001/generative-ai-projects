@@ -158,6 +158,9 @@ class AdaptiveRAGNodes:
         """
         logger.info("Executing external search.")
         logger.debug("External search query: %s", state.question)
+        if state.retrieved_docs:
+            state.retrieved_docs = []
+            logger.info("Cleared retrieved docs before external search.")
 
         if self.external_search_agent is None:
             logger.info("Initializing combined guardrail agent lazily for external search...")

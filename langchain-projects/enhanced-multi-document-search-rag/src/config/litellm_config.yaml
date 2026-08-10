@@ -15,6 +15,11 @@ model_list:
       model: groq/qwen/qwen3.6-27b
       api_key: os.environ/GROQ_API_KEY
 
+  - model_name: nvidia-glm-5.2
+    litellm_params:
+      model: nvidia_nim/z-ai/glm-5.2
+      api_key: os.environ/NVIDIA_API_KEY
+      api_base: os.environ/NVIDIA_API_BASE
 
 litellm_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

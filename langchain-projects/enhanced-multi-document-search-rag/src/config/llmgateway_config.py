@@ -10,6 +10,11 @@ load_dotenv()
 class Config:
     """Configuration class for RAG system"""
     
+    # Langsmith Tracing
+    LANGSMITH_TRACING = os.getenv("LANGSMITH_TRACING")
+    LANGSMITH_API_KEY = os.getenv("LANGSMITH_API_KEY")
+    LANGSMITH_PROJECT = os.getenv("LANGSMITH_PROJECT")
+
     # API Key
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY")
@@ -21,7 +26,7 @@ class Config:
     ASTRA_DB_COLLECTION_NAME = "rag_multi_doc_collection"
 
     # Model Configuration
-    #LLM_MODEL = "groq:openai-gpt-oss-120b"
+    
     # LiteLLM
     LITELLM_BASE_URL = os.getenv(
         "LITELLM_BASE_URL",
@@ -31,7 +36,7 @@ class Config:
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
     # Logical model name defined in litellm_config.yaml
-    LLM_MODEL = "gpt-oss-120b-groq"
+    LLM_MODEL = "nvidia-glm-5.2"
     EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 
@@ -42,6 +47,12 @@ class Config:
     MAX_REWRITES = 3
     MAX_GENERATIONS = 3
     
+    # Generation parameters
+    LLM_TEMPERATURE = 0.2
+    LLM_TOP_P = 0.9
+    LLM_MAX_TOKENS = 12000
+
+
     # Default URLs
     DEFAULT_URLS = [
         "https://lilianweng.github.io/posts/2023-06-23-agent/",
@@ -55,4 +66,7 @@ class Config:
             model=cls.LLM_MODEL,
             api_key=cls.LITELLM_API_KEY,
             base_url=cls.LITELLM_BASE_URL,
+            temperature=cls.LLM_TEMPERATURE,
+            top_p=cls.LLM_TOP_P,
+            max_tokens=cls.LLM_MAX_TOKENS,
         )

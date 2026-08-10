@@ -25,6 +25,11 @@ from vectorstore.vectorstore import VectorStoreManager
 import asyncio
 from graph_builder.adaptive_graph_builder import GraphBuilder
 
+# LangSmith
+LANGSMITH_TRACING = Config.LANGSMITH_TRACING
+LANGSMITH_API_KEY = Config.LANGSMITH_API_KEY
+LANGSMITH_PROJECT = Config.LANGSMITH_PROJECT
+
 # Page configuration
 st.set_page_config(
     page_title="🤖 Premium RAG Search & Ingestion",
