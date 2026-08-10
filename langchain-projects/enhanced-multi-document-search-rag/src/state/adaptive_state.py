@@ -72,3 +72,8 @@ class RAGState(BaseModel):
         default=0,
         description="Number of times the answer has been generated."
     )
+
+    query_blocked: bool = Field(
+        default=False,
+        description="Whether the user's query was blocked by the input guardrail."
+    )
