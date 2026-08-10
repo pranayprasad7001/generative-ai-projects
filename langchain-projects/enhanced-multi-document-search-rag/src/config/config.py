@@ -29,7 +29,8 @@ class Config:
     CHUNK_SIZE = 500
     CHUNK_OVERLAP = 50
     COHERE_RERANKER_TOP_N = 5
-    MAX_REWRITES = 2
+    MAX_REWRITES = 3
+    MAX_GENERATIONS = 3
     
     # Default URLs
     DEFAULT_URLS = [

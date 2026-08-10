@@ -5,7 +5,7 @@ from state.adaptive_state import RAGState
 from langchain_classic.schema import Document
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
-from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite
+from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
 from config.mcp_config import MCPToolManager
 from config.config import Config
 from prompts.rag_prompts import (
@@ -13,6 +13,9 @@ from prompts.rag_prompts import (
     RETRIEVAL_GRADER_SYSTEM_PROMPT,
     QUESTION_REWRITER_SYSTEM_PROMPT,
     EXTERNAL_SEARCH_SYSTEM_PROMPT,
+    GENERATOR_SYSTEM_PROMPT,
+    HALLUCINATION_DETECTOR_SYSTEM_PROMPT,
+    ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT,
 )
 
 class RAGNodes:
@@ -41,6 +44,8 @@ class RAGNodes:
         Returns:
             Updated RAG state with analysis and which tool to use
         """
+        if not state.original_question:
+            state.original_question = state.question
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", QUERY_ANALYZER_SYSTEM_PROMPT),
@@ -119,9 +124,9 @@ class RAGNodes:
         """Grade the relevance and sufficiency of retrieved documents."""
 
         prompt = ChatPromptTemplate.from_messages([
-        ("system", RETRIEVAL_GRADER_SYSTEM_PROMPT),
-        (
-            "human",
+            ("system", RETRIEVAL_GRADER_SYSTEM_PROMPT),
+            (
+                "human",
             """
             User Question:
             {question}
@@ -129,33 +134,27 @@ class RAGNodes:
             Retrieved Documents:
             {documents}
             """
-        )])
+            ),
+        ])
 
         documents = "\n\n".join(
             f"[Document {i}]\n{doc.page_content}"
             for i, doc in enumerate(state.retrieved_docs, start=1)
         )
 
-        response = self.llm.with_structured_output(RetrievalGrade).invoke(prompt.format_messages(
+        response = self.llm.with_structured_output(
+            RetrievalGrade
+        ).invoke(
+            prompt.format_messages(
                 question=state.question,
-                documents=documents
+                documents=documents,
             )
         )
 
-        state.grade = response.grade
+        state.retrieval_grade = response.grade
         state.analysis = response.reasoning
 
         return state
-
-    def grader_router(self, state: RAGState) -> str:
-        """
-        Route to next node based on grader output
-        """
-        if state.grade == "yes":
-            return "generate"
-        if state.rewrite_count >= Config.MAX_REWRITES: # TODO : after max tries, fallback to external search
-            return "generate"
-        return "rewriter"
     
     def rewriter(self, state: RAGState) -> RAGState:
         """
@@ -185,17 +184,120 @@ class RAGNodes:
         state.question = response.rewritten_question
         state.analysis = response.reasoning
         state.rewrite_count += 1
-
+        state.generate_count = 0
+        state.retrieved_docs = []
         return state
 
     def generator(self, state: RAGState) -> RAGState:
-        """"""
-        pass
+        """Generate answer based on retrieved documents."""
+
+        documents_content: str = "\n\n".join(
+            doc.page_content for doc in state.retrieved_docs
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", GENERATOR_SYSTEM_PROMPT),
+            (
+                "human",
+                """
+                User Question:
+                {question}
+
+                Retrieved Documents:
+                {documents}
+                """
+            ),
+        ])
+
+        response = self.llm.invoke(prompt.format_messages(question=state.question, documents=documents_content))
+        state.answer = response.content
+        state.generate_count += 1
+        return state
 
     def hallucination_detector(self, state: RAGState) -> RAGState:
-        """"""
-        pass
+        """Detects hallucinations in the generated answer."""
+
+        documents_content: str = "\n\n".join(
+            f"[Document {i}]\n{doc.page_content}"
+            for i, doc in enumerate(state.retrieved_docs, start=1)
+        )
+
+        prompt = ChatPromptTemplate.from_messages([
+        ("system", HALLUCINATION_DETECTOR_SYSTEM_PROMPT),
+        (
+            "human",
+            """
+            User Question:
+            {question}
+
+            Retrieved Documents:
+            {documents}
+
+            Generated Answer:
+            {answer}
+            """
+        ),
+        ])
+        
+        response = self.llm.with_structured_output(HallucinationGrade).invoke(
+            prompt.format_messages(question=state.question, documents=documents_content, answer=state.answer))
+
+        state.hallucination_grade = response.grade
+        state.analysis = response.reasoning
+
+        return state
 
     def answer_relevance_grader(self, state: RAGState) -> RAGState:
-        """"""
-        pass
+        """Grades answer relevance to the question."""
+
+        prompt = ChatPromptTemplate.from_messages([
+        ("system", ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT),
+        (
+            "human",
+            """
+            User Question:
+            {question}
+
+            Generated Answer:
+            {answer}
+            """
+        ),
+        ])
+
+        response = self.llm.with_structured_output(AnswerRelevanceGrade).invoke(
+            prompt.format_messages(question=state.question, answer=state.answer)
+        )
+
+        state.answer_relevance_grade = response.grade
+        state.analysis = response.reasoning
+
+        return state
+
+    def grader_router(self, state: RAGState) -> str:
+        """Route to the next node based on retrieval grading."""
+
+        if state.retrieval_grade == "yes":
+            return "generator"
+        if state.rewrite_count >= Config.MAX_REWRITES:
+            return "external_search"
+        return "rewriter"
+
+    def answer_relevance_router(self, state: RAGState) -> str:
+        """
+        Route to next node based on answer relevance grader output
+        """
+        if state.answer_relevance_grade == "yes":
+            return "end"
+        if state.rewrite_count >= Config.MAX_REWRITES:
+            return "external_search"
+        return "rewriter"
+
+    def hallucination_router(self, state: RAGState) -> str:
+        """Route based on hallucination detection."""
+        if state.hallucination_grade == "yes":
+            return "answer_relevance_grader"
+        if state.generate_count >= Config.MAX_GENERATIONS:
+            return "external_search"
+        return "generator"
+    
+    

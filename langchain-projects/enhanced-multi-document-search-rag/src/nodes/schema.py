@@ -31,3 +31,27 @@ class QuestionRewrite(BaseModel):
     reasoning: str = Field(
         description="Brief explanation of why the rewrite should improve retrieval."
     )
+
+class HallucinationGrade(BaseModel):
+    """
+    Schema for the hallucination grade, indicating whether the generated answer
+    is fully supported by the retrieved context.
+    """
+    grade: Literal["yes", "no"] = Field(
+        description="Whether the generated answer is fully supported by the context."
+    )
+    reasoning: str = Field(
+        description="Concise explanation of the hallucination check."
+    )
+
+class AnswerRelevanceGrade(BaseModel):
+    """
+    Schema for the answer relevance grade, indicating whether the generated answer
+    directly and adequately answers the user's question.
+    """
+    grade: Literal["yes", "no"] = Field(
+        description="Whether the generated answer directly and adequately answers the user's question."
+    )
+    reasoning: str = Field(
+        description="Concise explanation of the answer relevance check."
+    )
