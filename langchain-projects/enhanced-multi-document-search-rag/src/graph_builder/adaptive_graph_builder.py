@@ -22,7 +22,7 @@ class GraphBuilder:
         self.graph = None
         self.checkpointer = InMemorySaver()
 
-    def build_graph(self):
+    def build_graph(self, use_checkpointer: bool = True):
         """
         Build the RAG workflow graph
 
@@ -106,7 +106,10 @@ class GraphBuilder:
         builder.add_edge("output_answer_security_check", END)
 
         # Compile the graph
-        self.graph = builder.compile(checkpointer=self.checkpointer)
+        if use_checkpointer and self.checkpointer:
+            self.graph = builder.compile(checkpointer=self.checkpointer)
+        else:
+            self.graph = builder.compile()
         logger.info("StateGraph workflow successfully compiled.")
         return self.graph
 
