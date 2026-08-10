@@ -18,7 +18,7 @@ logging.basicConfig(
 # Add src to path
 sys.path.append(str(Path(__file__).parent / "src"))
 
-from config.config import Config
+from config.llmgateway_config import Config
 from document_ingestion.document_processor import DocumentProcessor
 from document_ingestion.chunker import ChunkStrategy
 from vectorstore.vectorstore import VectorStoreManager

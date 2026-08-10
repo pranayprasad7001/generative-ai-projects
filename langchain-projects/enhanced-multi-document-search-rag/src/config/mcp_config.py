@@ -1,5 +1,5 @@
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from config.config import Config
+from config.llmgateway_config import Config
 
 
 class MCPToolManager:

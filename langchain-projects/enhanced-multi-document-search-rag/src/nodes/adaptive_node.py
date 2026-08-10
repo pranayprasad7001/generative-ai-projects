@@ -4,10 +4,9 @@ import logging
 from typing import List
 from state.adaptive_state import AdaptiveRAGState
 from langchain_classic.schema import Document
-from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
 from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
-from config.config import Config
+from config.llmgateway_config import Config
 from langchain_core.messages import HumanMessage, AIMessage
 from nodes.guardrails import Guardrails
 from prompts.rag_prompts import (

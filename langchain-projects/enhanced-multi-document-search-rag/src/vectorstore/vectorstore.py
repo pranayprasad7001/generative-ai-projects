@@ -1,6 +1,6 @@
 import logging
 import hashlib
-from config.config import Config
+from config.llmgateway_config import Config
 from typing import List
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
