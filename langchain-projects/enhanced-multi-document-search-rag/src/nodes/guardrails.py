@@ -1,14 +1,17 @@
 import logging
-from typing import Any
-from langchain_core.messages import AIMessage
+from typing import Any, Callable, Awaitable
+from config.mcp_config import MCPToolManager
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain.agents import create_agent
-from prompts.rag_prompts import QUERY_SECURITY_SYSTEM_PROMPT, OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT
+from prompts.rag_prompts import QUERY_SECURITY_SYSTEM_PROMPT, OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT, EXTERNAL_SEARCH_SYSTEM_PROMPT
 from langchain.agents.middleware import (
     AgentMiddleware,
     AgentState,
     PIIMiddleware,
+    ToolCallRequest,
     hook_config,
 )
+from langgraph.types import Command
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,98 @@ class ContentFilterMiddleware(AgentMiddleware):
                 }
 
         return None
+
+    def wrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], ToolMessage | Command[Any]],
+    ) -> ToolMessage | Command[Any]:
+        """Intercept and validate tool arguments and output in sync context."""
+        tool_name = request.tool_call.get("name")
+        args = request.tool_call.get("args", {})
+
+        for val in args.values():
+            if isinstance(val, str):
+                for keyword in self.banned_keywords:
+                    if keyword in val.lower():
+                        logger.warning(
+                            f"Security middleware blocked tool call to '{tool_name}' containing banned keyword: '{keyword}'"
+                        )
+                        return ToolMessage(
+                            content="Error: Query contains blocked terms.",
+                            tool_call_id=request.tool_call["id"],
+                        )
+
+        try:
+            result = handler(request)
+        except Exception as e:
+            logger.error(f"Tool '{tool_name}' failed: {str(e)}")
+            return ToolMessage(
+                content="Error: The external tool failed to retrieve information.",
+                tool_call_id=request.tool_call["id"],
+            )
+
+        if isinstance(result, ToolMessage) and result.content:
+            content = result.content.lower()
+            for keyword in self.banned_keywords:
+                if keyword in content:
+                    logger.warning(
+                        f"Redacted banned content from tool '{tool_name}' output."
+                    )
+                    return ToolMessage(
+                        content="[Banned or unsafe content redacted from search results]",
+                        id=result.id,
+                        name=result.name,
+                        tool_call_id=result.tool_call_id,
+                    )
+
+        return result
+
+    async def awrap_tool_call(
+        self,
+        request: ToolCallRequest,
+        handler: Callable[[ToolCallRequest], Awaitable[ToolMessage | Command[Any]]],
+    ) -> ToolMessage | Command[Any]:
+        """Intercept and validate tool arguments and output in async context."""
+        tool_name = request.tool_call.get("name")
+        args = request.tool_call.get("args", {})
+
+        for val in args.values():
+            if isinstance(val, str):
+                for keyword in self.banned_keywords:
+                    if keyword in val.lower():
+                        logger.warning(
+                            f"Security middleware blocked tool call to '{tool_name}' containing banned keyword: '{keyword}'"
+                        )
+                        return ToolMessage(
+                            content="Error: Query contains blocked terms.",
+                            tool_call_id=request.tool_call["id"],
+                        )
+
+        try:
+            result = await handler(request)
+        except Exception as e:
+            logger.error(f"Tool '{tool_name}' failed: {str(e)}")
+            return ToolMessage(
+                content="Error: The external tool failed to retrieve information.",
+                tool_call_id=request.tool_call["id"],
+            )
+
+        if isinstance(result, ToolMessage) and result.content:
+            content = result.content.lower()
+            for keyword in self.banned_keywords:
+                if keyword in content:
+                    logger.warning(
+                        f"Redacted banned content from tool '{tool_name}' output."
+                    )
+                    return ToolMessage(
+                        content="[Banned or unsafe content redacted from search results]",
+                        id=result.id,
+                        name=result.name,
+                        tool_call_id=result.tool_call_id,
+                    )
+
+        return result
 
 class SafetyGuardrailMiddleware(AgentMiddleware):
     """
@@ -168,6 +263,8 @@ class Guardrails:
         self.llm = llm
         self.input_guardrail_agent = None
         self.output_guardrail_agent = None
+        self.combined_guardrail_agent = None
+        self.mcp_manager = MCPToolManager()
 
     def _get_common_pii_middleware(self) -> list:
         """Helper to return fresh instances of common PII middleware."""
@@ -177,12 +274,14 @@ class Guardrails:
                 strategy="redact",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
             PIIMiddleware(
                 "credit_card",
                 strategy="mask",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
             PIIMiddleware(
                 "api_key",
@@ -190,6 +289,7 @@ class Guardrails:
                 strategy="block",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
             PIIMiddleware(
                 "phone_number",
@@ -197,6 +297,7 @@ class Guardrails:
                 strategy="mask",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
             PIIMiddleware(
                 "ip_address",
@@ -204,6 +305,7 @@ class Guardrails:
                 strategy="mask",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
             PIIMiddleware(
                 "ssn",
@@ -211,6 +313,7 @@ class Guardrails:
                 strategy="redact",
                 apply_to_input=True,
                 apply_to_output=True,
+                apply_to_tool_results=True
             ),
         ]
 
@@ -239,6 +342,24 @@ class Guardrails:
                 ),
             ],
         )
+
+    async def _build_combined_guardrail_agent(self):
+        """Build combined guardrail agent"""
+        logger.debug("Building combined guardrail agent with PII and keyword filtering.")
+        tools = await self.mcp_manager.get_tools()
+        self.combined_guardrail_agent = create_agent(
+            model=self.llm,
+            tools=tools,
+            system_prompt=EXTERNAL_SEARCH_SYSTEM_PROMPT,
+            middleware=self._get_common_pii_middleware() + [
+                ContentFilterMiddleware(
+                    banned_keywords=self.BANNED_KEYWORDS
+                ),
+                SafetyGuardrailMiddleware(
+                    blocked_patterns=self.BLOCKED_PATTERNS
+                ),
+            ],
+        )
     
     def get_input_guardrail_agent(self):
         """Get input guardrail agent"""
@@ -251,3 +372,9 @@ class Guardrails:
         if self.output_guardrail_agent is None:
             self._build_output_guardrail_agent()
         return self.output_guardrail_agent
+
+    async def get_combined_guardrail_agent(self):
+        """Get output guardrail agent"""
+        if self.combined_guardrail_agent is None:
+            await self._build_combined_guardrail_agent()
+        return self.combined_guardrail_agent

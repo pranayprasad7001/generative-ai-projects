@@ -7,7 +7,6 @@ from langchain_classic.schema import Document
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
 from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
-from config.mcp_config import MCPToolManager
 from config.config import Config
 from langchain_core.messages import HumanMessage, AIMessage
 from nodes.guardrails import Guardrails
@@ -40,8 +39,7 @@ class RAGNodes:
         self.guardrails = Guardrails(self.llm)
         self.input_guardrail_agent = self.guardrails.get_input_guardrail_agent()
         self.output_guardrail_agent = self.guardrails.get_output_guardrail_agent()
-        self._web_search_agent = None
-        self.mcp_manager = MCPToolManager()
+        self.external_search_agent = None
 
     async def input_query_security_check(self, state: RAGState) -> RAGState:
         """Validate the user's query before entering the RAG workflow."""
@@ -183,16 +181,13 @@ class RAGNodes:
         """
         logger.info("Executing external search.")
         logger.debug("External search query: %s", state.question)
-        tools = await self.mcp_manager.get_tools()
 
-        if self._web_search_agent is None:
-            self._web_search_agent = create_agent(
-                self.llm,
-                system_prompt=EXTERNAL_SEARCH_SYSTEM_PROMPT,
-                tools=tools
-            )
+        if self.external_search_agent is None:
+            logger.info("Initializing combined guardrail agent lazily for external search...")
+            self.external_search_agent = await self.guardrails.get_combined_guardrail_agent()
+            logger.info("Combined guardrail agent initialized successfully with MCP tools.")
 
-        response = await self._web_search_agent.ainvoke({
+        response = await self.external_search_agent.ainvoke({
             "messages": [
                 ("user", state.question)
             ]
