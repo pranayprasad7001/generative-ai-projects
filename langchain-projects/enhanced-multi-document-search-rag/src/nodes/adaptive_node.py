@@ -2,7 +2,7 @@
 
 import logging
 from typing import List
-from state.adaptive_state import RAGState
+from state.adaptive_state import AdaptiveRAGState
 from langchain_classic.schema import Document
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,7 +14,6 @@ from prompts.rag_prompts import (
     QUERY_ANALYZER_SYSTEM_PROMPT,
     RETRIEVAL_GRADER_SYSTEM_PROMPT,
     QUESTION_REWRITER_SYSTEM_PROMPT,
-    EXTERNAL_SEARCH_SYSTEM_PROMPT,
     GENERATOR_SYSTEM_PROMPT,
     HALLUCINATION_DETECTOR_SYSTEM_PROMPT,
     ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT
@@ -22,7 +21,7 @@ from prompts.rag_prompts import (
 
 logger = logging.getLogger(__name__)
 
-class RAGNodes:
+class AdaptiveRAGNodes:
     """Contains node functions for RAG workflow"""
 
     def __init__(self, retriever, llm):
@@ -41,7 +40,7 @@ class RAGNodes:
         self.output_guardrail_agent = self.guardrails.get_output_guardrail_agent()
         self.external_search_agent = None
 
-    async def input_query_security_check(self, state: RAGState) -> RAGState:
+    async def input_query_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Validate the user's query before entering the RAG workflow."""
         logger.info("Running input security check.")
         logger.debug("Input query content: %s", state.question)
@@ -80,14 +79,14 @@ class RAGNodes:
 
         return state
 
-    def input_query_security_router(self, state: RAGState) -> str:
+    def input_query_security_router(self, state: AdaptiveRAGState) -> str:
         """Route the workflow based on the input security check."""
         logger.info("Routing from input security check. Query blocked: %s", state.query_blocked)
         if state.query_blocked:
             return "end"
         return "query_analyzer"
 
-    async def output_answer_security_check(self, state: RAGState) -> RAGState:
+    async def output_answer_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
         Review and safely rewrite the generated answer.
 
@@ -118,7 +117,7 @@ class RAGNodes:
         logger.info("Output security check completed.")
         return state
 
-    def query_analyzer(self, state: RAGState) -> RAGState:
+    def query_analyzer(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
         Analyze the query and determine which direction to route
 
@@ -148,28 +147,7 @@ class RAGNodes:
         logger.debug("Query Analyzer reasoning: %s", state.analysis)
         return state
 
-    def query_router(self, state: RAGState) -> str:
-        """
-        Routes the query to the appropriate tool based on the analysis
-
-        Args:
-            state: Current RAG state
-
-        Returns:
-            Updated RAG state with routed query
-        """
-        logger.info("Routing query to: %s", state.tool_type)
-        if state.tool_type == "vector_search":
-            return "vector_search"
-
-        if state.tool_type == "external_search":
-            return "external_search"
-
-        raise ValueError(
-            f"Invalid tool_type: {state.tool_type}"
-        )
-
-    async def external_search(self, state: RAGState) -> RAGState:
+    async def external_search(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
         Perform external search to find relevant information
 
@@ -201,7 +179,7 @@ class RAGNodes:
         logger.info("External search completed. Answer length: %d", len(answer))
         return state
 
-    def vector_search(self, state: RAGState) -> RAGState:
+    def vector_search(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Perform vector search to find relevant documents."""
         logger.info("Executing vector search.")
         logger.debug("Vector search query: %s", state.question)
@@ -210,7 +188,7 @@ class RAGNodes:
         logger.info("Vector search retrieved %d documents", len(retrieved_documents))
         return state
 
-    def grader(self, state: RAGState) -> RAGState:
+    def documents_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Grade the relevance and sufficiency of retrieved documents."""
         logger.info("Grading %d retrieved documents.", len(state.retrieved_docs))
         logger.debug("Grading documents for query: %s", state.question)
@@ -249,7 +227,7 @@ class RAGNodes:
         logger.debug("Retrieval grader reasoning: %s", state.analysis)
         return state
     
-    def rewriter(self, state: RAGState) -> RAGState:
+    def query_rewriter(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
         Rewrite the user's question to improve retrieval accuracy
         """
@@ -285,7 +263,7 @@ class RAGNodes:
         logger.debug("Rewritten question content: %s", state.question)
         return state
 
-    def generator(self, state: RAGState) -> RAGState:
+    def answer_generator(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Generate answer based on retrieved documents."""
         logger.info("Generating answer. Generate count: %d", state.generate_count + 1)
 
@@ -313,7 +291,7 @@ class RAGNodes:
         logger.info("Answer generated successfully.")
         return state
 
-    def hallucination_detector(self, state: RAGState) -> RAGState:
+    def hallucination_detector(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Detects hallucinations in the generated answer."""
         logger.debug("Running hallucination check for generated answer.")
 
@@ -348,7 +326,7 @@ class RAGNodes:
         logger.debug("Hallucination check reasoning: %s", state.analysis)
         return state
 
-    def answer_relevance_grader(self, state: RAGState) -> RAGState:
+    def answer_relevance_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Grades answer relevance to the question."""
         logger.debug("Running answer relevance check.")
 
@@ -376,33 +354,63 @@ class RAGNodes:
         logger.debug("Answer relevance reasoning: %s", state.analysis)
         return state
 
-    def grader_router(self, state: RAGState) -> str:
+    def query_security_router(self, state: AdaptiveRAGState) -> str:
+        """Route the workflow based on the input security check."""
+
+        if state.query_blocked:
+            return "end"
+
+        return "query_analyzer"
+
+    def query_router(self, state: AdaptiveRAGState) -> str:
+        """
+        Routes the query to the appropriate tool based on the analysis
+
+        Args:
+            state: Current RAG state
+
+        Returns:
+            Updated RAG state with routed query
+        """
+        logger.info("Routing query to: %s", state.tool_type)
+        if state.tool_type == "vector_search":
+            return "vector_search"
+
+        if state.tool_type == "external_search":
+            return "external_search"
+
+        raise ValueError(
+            f"Invalid tool_type: {state.tool_type}"
+        )
+
+    def grader_router(self, state: AdaptiveRAGState) -> str:
         """Route to the next node based on retrieval grading."""
         logger.info("Routing from retrieval grader. Grade: %s, Rewrite count: %d", state.retrieval_grade, state.rewrite_count)
         if state.retrieval_grade == "yes":
-            return "generator"
+            return "answer_generator"
         if state.rewrite_count >= Config.MAX_REWRITES:
             return "external_search"
-        return "rewriter"
+        return "query_rewriter"
 
-    def answer_relevance_router(self, state: RAGState) -> str:
-        """
-        Route to next node based on answer relevance grader output
-        """
-        logger.info("Routing from relevance grader. Grade: %s, Rewrite count: %d", state.answer_relevance_grade, state.rewrite_count)
-        if state.answer_relevance_grade == "yes":
-            return "end"
-        if state.rewrite_count >= Config.MAX_REWRITES:
-            return "external_search"
-        return "rewriter"
-
-    def hallucination_router(self, state: RAGState) -> str:
+    def hallucination_router(self, state: AdaptiveRAGState) -> str:
         """Route based on hallucination detection."""
         logger.info("Routing from hallucination detector. Grade: %s, Generate count: %d", state.hallucination_grade, state.generate_count)
         if state.hallucination_grade == "yes":
             return "answer_relevance_grader"
         if state.generate_count >= Config.MAX_GENERATIONS:
             return "external_search"
-        return "generator"
+        return "answer_generator"
+
+    def answer_relevance_router(self, state: AdaptiveRAGState) -> str:
+        """
+        Route to next node based on answer relevance grader output
+        """
+        logger.info("Routing from relevance grader. Grade: %s, Rewrite count: %d", state.answer_relevance_grade, state.rewrite_count)
+        if state.answer_relevance_grade == "yes":
+            return "output_answer_security_check"
+        if state.rewrite_count >= Config.MAX_REWRITES:
+            return "external_search"
+        return "query_rewriter"
+
     
     

@@ -22,7 +22,8 @@ from config.config import Config
 from document_ingestion.document_processor import DocumentProcessor
 from document_ingestion.chunker import ChunkStrategy
 from vectorstore.vectorstore import VectorStoreManager
-from graph_builder.graph_builder import GraphBuilder
+import asyncio
+from graph_builder.adaptive_graph_builder import GraphBuilder
 
 # Page configuration
 st.set_page_config(
@@ -324,7 +325,7 @@ def main():
             with st.spinner("🔍 Agentic retrieval and answer generation in progress..."):
                 start_time = time.time()
                 try:
-                    result = st.session_state.rag_system.run(question)
+                    result = asyncio.run(st.session_state.rag_system.run(question))
                     elapsed_time = time.time() - start_time
                     
                     # Store in search history

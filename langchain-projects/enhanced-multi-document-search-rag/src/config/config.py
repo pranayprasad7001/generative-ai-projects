@@ -21,7 +21,7 @@ class Config:
     ASTRA_DB_COLLECTION_NAME = "rag_multi_doc_collection"
 
     # Model Configuration
-    LLM_MODEL = "groq:openai/gpt-oss-120b"
+    LLM_MODEL = "groq:openai-gpt-oss-120b"
     EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 

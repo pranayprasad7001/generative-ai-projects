@@ -5,7 +5,7 @@ from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 
 
-class RAGState(BaseModel):
+class AdaptiveRAGState(BaseModel):
     """State for the autonomous RAG workflow."""
 
     messages: list[BaseMessage] = Field(

@@ -3,7 +3,14 @@ from typing import Any, Callable, Awaitable
 from config.mcp_config import MCPToolManager
 from langchain_core.messages import AIMessage, ToolMessage
 from langchain.agents import create_agent
-from prompts.rag_prompts import QUERY_SECURITY_SYSTEM_PROMPT, OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT, EXTERNAL_SEARCH_SYSTEM_PROMPT
+from langgraph.types import Command
+
+from prompts.rag_prompts import (
+    QUERY_SECURITY_SYSTEM_PROMPT, 
+    OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT, 
+    EXTERNAL_SEARCH_SYSTEM_PROMPT
+)
+
 from langchain.agents.middleware import (
     AgentMiddleware,
     AgentState,
@@ -11,7 +18,7 @@ from langchain.agents.middleware import (
     ToolCallRequest,
     hook_config,
 )
-from langgraph.types import Command
+
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +107,8 @@ class ContentFilterMiddleware(AgentMiddleware):
             )
 
         if isinstance(result, ToolMessage) and result.content:
-            content = result.content.lower()
+            content_str = result.content if isinstance(result.content, str) else str(result.content)
+            content = content_str.lower()
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
@@ -146,7 +154,8 @@ class ContentFilterMiddleware(AgentMiddleware):
             )
 
         if isinstance(result, ToolMessage) and result.content:
-            content = result.content.lower()
+            content_str = result.content if isinstance(result.content, str) else str(result.content)
+            content = content_str.lower()
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
@@ -374,7 +383,7 @@ class Guardrails:
         return self.output_guardrail_agent
 
     async def get_combined_guardrail_agent(self):
-        """Get output guardrail agent"""
+        """Get combined guardrail agent."""
         if self.combined_guardrail_agent is None:
             await self._build_combined_guardrail_agent()
         return self.combined_guardrail_agent
