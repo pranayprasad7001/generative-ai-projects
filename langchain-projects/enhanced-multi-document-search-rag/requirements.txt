@@ -21,3 +21,4 @@ msoffcrypto-tool
 langchain-cohere
 cohere
 langchain-mcp-adapters
+langchain-classic
