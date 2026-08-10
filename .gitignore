@@ -51,6 +51,7 @@ pip-wheel-metadata/
 
 # Miscellaneous Cache
 .cache/
+.langgraph_api
 
 # Chroma DB / Vector Stores
 chroma_db/
