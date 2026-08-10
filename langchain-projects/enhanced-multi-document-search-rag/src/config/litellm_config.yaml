@@ -21,5 +21,11 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY
       api_base: os.environ/NVIDIA_API_BASE
 
+router_settings:
+  num_retries: 2
+  timeout: 30
+  fallbacks:
+    - nvidia-glm-5.2: ["gpt-oss-120b-groq", "gpt-oss-20b-groq"]
+
 litellm_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
