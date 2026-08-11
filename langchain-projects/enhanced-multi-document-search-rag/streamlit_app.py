@@ -351,7 +351,8 @@ def main():
                         'answer': result.get('answer', 'No answer generated'),
                         'time': elapsed_time,
                         'cost': cost,
-                        'retrieved_docs': result.get('retrieved_docs', [])
+                        'retrieved_docs': result.get('retrieved_docs', []),
+                        'external_citations': result.get('external_citations', [])
                     })
                     
                     # Display Answer
@@ -369,6 +370,22 @@ def main():
                         """,
                         unsafe_allow_html=True
                     )
+
+                    # Display external citations if any
+                    external_citations = result.get('external_citations', [])
+                    if external_citations:
+                        links = [
+                            f'<a href="{url}" target="_blank" style="color: #6366f1; text-decoration: none; font-weight: 500;">{url.split("//")[-1].split("/")[0].replace("www.", "")}</a>'
+                            for url in external_citations
+                        ]
+                        st.markdown(
+                            f"""
+                            <div style="font-size: 0.9rem; color: #94a3b8; margin-top: -0.75rem; margin-bottom: 1.5rem;">
+                                🔗 <strong>External Citations:</strong> {" • ".join(links)}
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
                     
                     # Source documents display
                     st.markdown("### 📄 Retrieved Source Documents")
@@ -400,7 +417,7 @@ def main():
                     <div class="source-card">
                         <strong>Q: {item['question']}</strong><br/>
                         <span style="color: #94a3b8; font-size: 0.9rem;">Answer: {item['answer'][:200]}...</span><br/>
-                        <span style="color: #64748b; font-size: 0.8rem;">Latency: {item['time']:.2f}s | Cost: {format_cost(item_cost)} | References: {len(item['retrieved_docs'])}</span>
+                        <span style="color: #64748b; font-size: 0.8rem;">Latency: {item['time']:.2f}s | Cost: {format_cost(item_cost)} | References: {len(item['retrieved_docs'])} | Citations: {len(item.get('external_citations', []))}</span>
                     </div>
                     """, 
                     unsafe_allow_html=True

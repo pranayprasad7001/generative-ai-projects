@@ -1,13 +1,15 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
 import logging
+import json
+import re
 from typing import List
 from state.adaptive_state import AdaptiveRAGState
 from langchain_classic.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
 from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
 from config.llmgateway_config import Config
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from nodes.guardrails import Guardrails
 from prompts.rag_prompts import (
     QUERY_ANALYZER_SYSTEM_PROMPT,
@@ -178,7 +180,18 @@ class AdaptiveRAGNodes:
         
         state.external_results = answer
         state.answer = answer
-        logger.info("External search completed. Answer length: %d", len(answer))
+
+        # Extract external citations (unique URLs) from ToolMessages
+        citations = []
+        for msg in messages:
+            if isinstance(msg, ToolMessage) and msg.content:
+                urls = re.findall(r'https?://[^\s\)\]\"\']+', msg.content)
+                for url in urls:
+                    if url not in citations:
+                        citations.append(url)
+
+        state.external_citations = citations
+        logger.info("External search completed. Answer length: %d, Citations found: %d", len(answer), len(citations))
         return state
 
     def vector_search(self, state: AdaptiveRAGState) -> AdaptiveRAGState:

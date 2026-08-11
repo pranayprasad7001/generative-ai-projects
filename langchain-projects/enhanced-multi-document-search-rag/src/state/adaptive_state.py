@@ -82,3 +82,8 @@ class AdaptiveRAGState(BaseModel):
         default=0.0,
         description="Cumulative cost of model usage in USD."
     )
+
+    external_citations: list[str] = Field(
+        default_factory=list,
+        description="Citations/source URLs extracted from external search."
+    )
