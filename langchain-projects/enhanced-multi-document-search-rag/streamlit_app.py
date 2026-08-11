@@ -30,6 +30,17 @@ LANGSMITH_TRACING = Config.LANGSMITH_TRACING
 LANGSMITH_API_KEY = Config.LANGSMITH_API_KEY
 LANGSMITH_PROJECT = Config.LANGSMITH_PROJECT
 
+def format_cost(cost: float) -> str:
+    """Format float cost to user-readable string without scientific notation."""
+    if cost == 0.0:
+        return "$0.00"
+    # Format to 7 decimal places to capture micro-costs
+    val = f"{cost:.7f}"
+    # Strip trailing zeros, keeping at least 2 decimal places
+    while val.endswith("0") and len(val.split(".")[1]) > 2:
+        val = val[:-1]
+    return f"${val}"
+
 # Page configuration
 st.set_page_config(
     page_title="🤖 Premium RAG Search & Ingestion",
@@ -332,18 +343,32 @@ def main():
                 try:
                     result = asyncio.run(st.session_state.rag_system.run(question))
                     elapsed_time = time.time() - start_time
+                    cost = result.get('total_cost', 0.0)
                     
                     # Store in search history
                     st.session_state.history.append({
                         'question': question,
                         'answer': result.get('answer', 'No answer generated'),
                         'time': elapsed_time,
+                        'cost': cost,
                         'retrieved_docs': result.get('retrieved_docs', [])
                     })
                     
                     # Display Answer
                     st.markdown("### 💡 Generated Answer")
                     st.markdown(f'<div class="answer-card">{result.get("answer", "No answer generated")}</div>', unsafe_allow_html=True)
+                    
+                    # Premium stats badge under answer card
+                    st.markdown(
+                        f"""
+                        <div style="display: flex; gap: 1.5rem; margin-top: -0.75rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #94a3b8; background-color: rgba(30, 41, 59, 0.4); padding: 0.5rem 1rem; border-radius: 0.375rem; width: fit-content; border: 1px solid #334155;">
+                            <span>⏱️ <strong>Latency:</strong> {elapsed_time:.2f}s</span>
+                            <span style="color: #475569;">|</span>
+                            <span>💰 <strong>Estimated Cost:</strong> <code style="color: #10b981; font-weight: bold; background: none; padding: 0;">{format_cost(cost)}</code></span>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
                     
                     # Source documents display
                     st.markdown("### 📄 Retrieved Source Documents")
@@ -360,8 +385,6 @@ def main():
                     else:
                         st.info("No reference documents found.")
                         
-                    st.caption(f"⏱️ Response latency: {elapsed_time:.2f} seconds")
-                    
                 except Exception as e:
                     st.error(f"❌ Error during retrieval/generation: {str(e)}")
                     logging.exception("Search workflow error")
@@ -371,12 +394,13 @@ def main():
             st.markdown("---")
             st.markdown("### 📜 Recent Search History")
             for idx, item in enumerate(reversed(st.session_state.history[-3:])):
+                item_cost = item.get('cost', 0.0)
                 st.markdown(
                     f"""
                     <div class="source-card">
                         <strong>Q: {item['question']}</strong><br/>
                         <span style="color: #94a3b8; font-size: 0.9rem;">Answer: {item['answer'][:200]}...</span><br/>
-                        <span style="color: #64748b; font-size: 0.8rem;">Latency: {item['time']:.2f}s | References: {len(item['retrieved_docs'])}</span>
+                        <span style="color: #64748b; font-size: 0.8rem;">Latency: {item['time']:.2f}s | Cost: {format_cost(item_cost)} | References: {len(item['retrieved_docs'])}</span>
                     </div>
                     """, 
                     unsafe_allow_html=True

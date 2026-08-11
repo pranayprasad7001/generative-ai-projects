@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, START, END
 from state.adaptive_state import AdaptiveRAGState
 from nodes.adaptive_node import AdaptiveRAGNodes
 from langgraph.checkpoint.memory import InMemorySaver
+from config.cost_callback import CostTrackingCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -135,18 +136,30 @@ class GraphBuilder:
         )
 
         initial_state = AdaptiveRAGState(question=question)
+        cost_callback = CostTrackingCallbackHandler()
 
         result = await self.graph.ainvoke(
             initial_state,
             config={
                 "configurable": {
                     "thread_id": "default_thread"
-                }
+                },
+                "callbacks": [cost_callback]
             },
         )
 
+        # Update the result state with the calculated total cost
+        if isinstance(result, dict):
+            result["total_cost"] = cost_callback.total_cost
+        elif hasattr(result, "total_cost"):
+            try:
+                result.total_cost = cost_callback.total_cost
+            except Exception:
+                pass
+
         logger.info(
-            "Adaptive RAG workflow run completed successfully."
+            "Adaptive RAG workflow run completed successfully. Cumulative Cost: $%s",
+            cost_callback.total_cost,
         )
 
         return result

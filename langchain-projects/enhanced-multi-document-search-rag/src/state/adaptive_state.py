@@ -77,3 +77,8 @@ class AdaptiveRAGState(BaseModel):
         default=False,
         description="Whether the user's query was blocked by the input guardrail."
     )
+
+    total_cost: float = Field(
+        default=0.0,
+        description="Cumulative cost of model usage in USD."
+    )

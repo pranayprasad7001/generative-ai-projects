@@ -1,11 +1,50 @@
 """Configuration module for Agentic RAG system"""
 
 import os
+import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 
 # Load environment variables
 load_dotenv()
+
+import litellm
+
+# Register custom model pricing for LiteLLM cost calculation fallback
+try:
+    litellm.register_model({
+        "nvidia-glm-5.2": {
+            "max_tokens": 12000,
+            "input_cost_per_token": 0.0000014,
+            "output_cost_per_token": 0.0000042,
+            "litellm_provider": "openai",
+            "mode": "chat"
+        },
+        "gpt-oss-120b-groq": {
+            "max_tokens": 8192,
+            "input_cost_per_token": 0.00000015,
+            "output_cost_per_token": 0.00000075,
+            "litellm_provider": "openai",
+            "mode": "chat"
+        },
+        "gpt-oss-20b-groq": {
+            "max_tokens": 8192,
+            "input_cost_per_token": 0.000000075,
+            "output_cost_per_token": 0.0000003,
+            "litellm_provider": "openai",
+            "mode": "chat"
+        },
+        "qwen3.6-27b-groq": {
+            "max_tokens": 8192,
+            "input_cost_per_token": 0.000000289,
+            "output_cost_per_token": 0.0000024,
+            "litellm_provider": "openai",
+            "mode": "chat"
+        }
+    })
+except Exception as e:
+    
+    logging.getLogger(__name__).warning("Failed to register custom models in LiteLLM: %s", e)
 
 class Config:
     """Configuration class for RAG system"""
@@ -69,4 +108,5 @@ class Config:
             temperature=cls.LLM_TEMPERATURE,
             top_p=cls.LLM_TOP_P,
             max_tokens=cls.LLM_MAX_TOKENS,
+            include_response_headers=True,
         )
