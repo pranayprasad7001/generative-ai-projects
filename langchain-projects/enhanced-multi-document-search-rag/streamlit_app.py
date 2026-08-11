@@ -43,7 +43,7 @@ def format_cost(cost: float) -> str:
 
 # Page configuration
 st.set_page_config(
-    page_title="🤖 Premium RAG Search & Ingestion",
+    page_title="🤖 Enhanced Multi-Document Search RAG",
     page_icon="🔍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -245,7 +245,7 @@ def main():
     init_session_state()
     
     # Title Section
-    st.markdown('<div class="main-title">🤖 Premium RAG Search & Ingestion</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">🤖 Enhanced Multi-Document Search RAG</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Ingest custom files and URLs, build semantic index, and ask questions</div>', unsafe_allow_html=True)
     
     # Sidebar for Ingestion Controls
