@@ -2,6 +2,7 @@ import logging
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.outputs import LLMResult
 import litellm
+from config.llmgateway_config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +48,7 @@ class CostTrackingCallbackHandler(BaseCallbackHandler):
             # Check llm_output for token usage if not found in generations
             llm_output = response.llm_output or {}
             token_usage = llm_output.get("token_usage") or {}
-            model_name = llm_output.get("model_name") or "nvidia-glm-5.2"
+            model_name = llm_output.get("model_name") or Config.LLM_MODEL
             
             # If we have token usage at the root LLMResult level, try to use it
             if token_usage:
@@ -68,7 +69,7 @@ class CostTrackingCallbackHandler(BaseCallbackHandler):
             if fallback_cost == 0.0:
                 for generations in response.generations:
                     for gen in generations:
-                        model_name = "nvidia-glm-5.2"
+                        model_name = Config.LLM_MODEL
                         token_usage = {}
                         
                         if hasattr(gen, "message") and gen.message:

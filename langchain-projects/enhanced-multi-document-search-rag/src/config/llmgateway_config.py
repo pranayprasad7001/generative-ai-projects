@@ -75,9 +75,10 @@ class Config:
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
     # Logical model name defined in litellm_config.yaml
-    LLM_MODEL = "nvidia-glm-5.2"
+    LLM_MODEL = "gpt-oss-120b-groq"
     EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
+    ASTRA_DB_COLLECTION_NAME = "rag_multi_doc_collection"
 
     # Document Processing
     CHUNK_SIZE = 500
@@ -89,7 +90,8 @@ class Config:
     # Generation parameters
     LLM_TEMPERATURE = 0.2
     LLM_TOP_P = 0.9
-    LLM_MAX_TOKENS = 12000
+    LLM_MAX_TOKENS = 7000
+    LLM_RATE_LIMITER = 7000
 
 
     # Default URLs
@@ -109,4 +111,5 @@ class Config:
             top_p=cls.LLM_TOP_P,
             max_tokens=cls.LLM_MAX_TOKENS,
             include_response_headers=True,
+            rate_limiter=cls.LLM_RATE_LIMITER
         )
