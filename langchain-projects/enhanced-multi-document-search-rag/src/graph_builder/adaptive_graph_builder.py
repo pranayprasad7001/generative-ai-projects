@@ -138,28 +138,39 @@ class GraphBuilder:
         initial_state = AdaptiveRAGState(question=question)
         cost_callback = CostTrackingCallbackHandler()
 
-        result = await self.graph.ainvoke(
-            initial_state,
-            config={
-                "configurable": {
-                    "thread_id": "default_thread"
+        try:
+            result = await self.graph.ainvoke(
+                initial_state,
+                config={
+                    "configurable": {
+                        "thread_id": "default_thread"
+                    },
+                    "callbacks": [cost_callback]
                 },
-                "callbacks": [cost_callback]
-            },
-        )
+            )
 
-        # Update the result state with the calculated total cost
-        if isinstance(result, dict):
-            result["total_cost"] = cost_callback.total_cost
-        elif hasattr(result, "total_cost"):
-            try:
-                result.total_cost = cost_callback.total_cost
-            except Exception:
-                pass
+            # Update the result state with the calculated total cost
+            if isinstance(result, dict):
+                result["total_cost"] = cost_callback.total_cost
+            elif hasattr(result, "total_cost"):
+                try:
+                    result.total_cost = cost_callback.total_cost
+                except Exception:
+                    pass
 
-        logger.info(
-            "Adaptive RAG workflow run completed successfully. Cumulative Cost: $%s",
-            cost_callback.total_cost,
-        )
+            logger.info(
+                "Adaptive RAG workflow run completed successfully. Cumulative Cost: $%s",
+                cost_callback.total_cost,
+            )
+            return result
 
-        return result
+        except Exception as e:
+            logger.error("Error during Adaptive RAG workflow execution: %s", str(e), exc_info=True)
+            # Create a fallback dictionary matching AdaptiveRAGState schema keys
+            return {
+                "question": question,
+                "answer": f"⚠️ An error occurred during request processing: {str(e)}",
+                "retrieved_docs": [],
+                "external_citations": [],
+                "total_cost": cost_callback.total_cost
+            }
