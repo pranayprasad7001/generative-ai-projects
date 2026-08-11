@@ -22,6 +22,7 @@ langchain-cohere
 cohere
 langchain-mcp-adapters
 langchain-classic
-litellm[proxy]==1.96.0
-fastapi>=0.136.3
+litellm[proxy]
+fastapi<=0.139.2
 langchain-openai
+torchvision

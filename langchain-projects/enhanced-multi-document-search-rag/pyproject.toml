@@ -31,6 +31,7 @@ dependencies = [
     "unstructured>=0.25.2",
     "wikipedia>=1.4.0",
     "langchain-openai>=1.4.3",
-    "litellm[proxy]==1.96.0",
-    "fastapi>=0.136.3",
+    "torchvision>=0.28.0",
+    "litellm[proxy]>=1.96.0",
+    "fastapi<=0.139.2",
 ]
