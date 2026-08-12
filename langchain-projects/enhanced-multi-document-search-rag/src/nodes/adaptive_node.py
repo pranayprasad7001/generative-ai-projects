@@ -300,7 +300,9 @@ class AdaptiveRAGNodes:
             ),
         ])
 
-        response = self.llm.invoke(prompt.format_messages(question=state.question, documents=documents_content))
+        response = self.llm.bind(
+            extra_body={"cache": {"use-cache": True, "ttl": 1800}}
+        ).invoke(prompt.format_messages(question=state.question, documents=documents_content))
         state.answer = response.content
         state.generate_count += 1
         logger.info("Answer generated successfully.")

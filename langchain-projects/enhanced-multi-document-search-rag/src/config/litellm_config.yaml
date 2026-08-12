@@ -21,6 +21,11 @@ model_list:
       api_key: os.environ/NVIDIA_API_KEY
       api_base: os.environ/NVIDIA_API_BASE
 
+  - model_name: cohere-embed
+    litellm_params:
+      model: cohere/embed-english-v3.0
+      api_key: os.environ/COHERE_API_KEY
+
 router_settings:
   num_retries: 2
   timeout: 30
@@ -29,3 +34,13 @@ router_settings:
 
 litellm_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
+  cache: True
+  cache_params:
+    type: redis-semantic
+    mode: default_off 
+    host: os.environ/REDIS_HOST
+    port: os.environ/REDIS_PORT
+    password: os.environ/REDIS_PASSWORD
+    similarity_threshold: 0.85
+    ttl: 1800
+    redis_semantic_cache_embedding_model: cohere-embed

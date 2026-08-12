@@ -76,7 +76,7 @@ class Config:
 
     # Logical model name defined in litellm_config.yaml
     LLM_MODEL = "gpt-oss-120b-groq"
-    EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5" #"sentence-transformers/all-MiniLM-L6-v2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
     ASTRA_DB_COLLECTION_NAME = "rag_multi_doc_collection"
 
