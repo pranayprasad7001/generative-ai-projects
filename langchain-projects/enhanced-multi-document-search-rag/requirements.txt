@@ -26,3 +26,5 @@ litellm[proxy]
 fastapi<=0.139.2
 langchain-openai
 torchvision
+redisvl
+redis

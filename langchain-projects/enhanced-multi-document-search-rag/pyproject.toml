@@ -34,4 +34,6 @@ dependencies = [
     "torchvision>=0.28.0",
     "litellm[proxy]>=1.96.0",
     "fastapi<=0.139.2",
+    "redisvl>=0.25.1",
+    "redis>=7.4.1",
 ]
