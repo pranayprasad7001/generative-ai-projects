@@ -356,8 +356,11 @@ class Guardrails:
         """Build combined guardrail agent"""
         logger.debug("Building combined guardrail agent with PII and keyword filtering.")
         tools = await self.mcp_manager.get_tools()
+        cached_llm = self.llm.bind(
+            extra_body={"cache": {"use-cache": True, "ttl": 1800}}
+        )
         self.combined_guardrail_agent = create_agent(
-            model=self.llm,
+            model=cached_llm,
             tools=tools,
             system_prompt=EXTERNAL_SEARCH_SYSTEM_PROMPT,
             middleware=self._get_common_pii_middleware() + [
