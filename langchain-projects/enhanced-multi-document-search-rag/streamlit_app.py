@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Streamlit UI for Agentic RAG System - Enhanced Version"""
 
 import streamlit as st
@@ -43,8 +44,8 @@ def format_cost(cost: float) -> str:
 
 # Page configuration
 st.set_page_config(
-    page_title="🤖 Enhanced Multi-Document Search RAG",
-    page_icon="🔍",
+    page_title="\U0001f916 Enhanced Multi-Document Search RAG",
+    page_icon="\U0001f50d",
     layout="wide",
     initial_sidebar_state="expanded"
 )
@@ -127,14 +128,15 @@ st.markdown("""
         padding: 1rem;
         margin-bottom: 0.75rem;
     }
-    
     /* Sidebar Headers */
     .sidebar-header {
         font-size: 1.25rem;
         font-weight: 700;
-        color: #f1f5f9;
+        background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
         margin-bottom: 1rem;
-        border-bottom: 1px solid #334155;
+        border-bottom: 2px solid #6366f1;
         padding-bottom: 0.5rem;
     }
     </style>
@@ -151,9 +153,11 @@ def init_session_state():
         st.session_state.num_chunks = 0
     if 'history' not in st.session_state:
         st.session_state.history = []
+    if 'vector_store' not in st.session_state:
+        st.session_state.vector_store = None
 
 
-def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chunk_overlap):
+def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chunk_overlap, search_type_choice):
     """Process files and URLs, build the vector store, and initialize RAG"""
     try:
         # Create temp folder for files
@@ -177,11 +181,12 @@ def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chu
                 saved_files.append(file_path)
                 
         if not sources:
-            st.error("⚠️ Please specify at least one URL or upload a file.")
+            st.error("\u26a0\ufe0f Please specify at least one URL or upload a file.")
             return False
 
         # Initialize VectorStoreManager first (so we can get embeddings if needed)
         vector_store = VectorStoreManager()
+        st.session_state.vector_store = vector_store
         
         # Decide embeddings to use for semantic chunking / hybrid chunking
         embeddings = None
@@ -199,27 +204,28 @@ def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chu
         )
         
         # We perform ingestion in streamlit using visual feedback
-        with st.status("🛠️ Building database...", expanded=True) as status:
-            status.update(label="📄 Extracting text from files and URLs...", state="running")
+        with st.status("\U0001f6e0\ufe0f Building database...", expanded=True) as status:
+            status.update(label="\U0001f4c4 Extracting text from files and URLs...", state="running")
             documents = doc_processor.load_documents(sources, strategy=strategy)
             
             if not documents:
-                status.update(label="❌ Ingestion failed: No text content found.", state="error")
-                st.error("⚠️ No text content could be extracted from the specified sources.")
+                status.update(label="\u274c Ingestion failed: No text content found.", state="error")
+                st.error("\u26a0\ufe0f No text content could be extracted from the specified sources.")
                 return False
                 
-            status.update(label=f"💾 Indexing {len(documents)} chunks into Astra DB...", state="running")
+            status.update(label=f"\U0001f4be Indexing {len(documents)} chunks into Astra DB...", state="running")
             vector_store.create_vectorstore(documents)
             
-            status.update(label="⚡ Initializing agentic retrieval graph...", state="running")
+            status.update(label="\u26a1 Initializing agentic retrieval graph...", state="running")
             llm = Config.get_llm()
+            search_type = "mmr" if search_type_choice == "Maximal Marginal Relevance (MMR)" else "similarity"
             graph_builder = GraphBuilder(
-                retriever=vector_store.get_retriever(),
+                retriever=vector_store.get_retriever(search_type=search_type),
                 llm=llm
             )
             graph_builder.build_graph()
             
-            status.update(label="✅ Database successfully built!", state="complete")
+            status.update(label="\u2705 Database successfully built!", state="complete")
 
         # Save to session state
         st.session_state.rag_system = graph_builder
@@ -236,7 +242,7 @@ def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chu
                 
         return True
     except Exception as e:
-        st.error(f"❌ Failed to build RAG database: {str(e)}")
+        st.error(f"\u274c Failed to build RAG database: {str(e)}")
         logging.exception("Error during ingestion process")
         return False
 
@@ -245,12 +251,12 @@ def main():
     init_session_state()
     
     # Title Section
-    st.markdown('<div class="main-title">🤖 Enhanced Multi-Document Search RAG</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">\U0001f916 Enhanced Multi-Document Search RAG</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle">Ingest custom files and URLs, build semantic index, and ask questions</div>', unsafe_allow_html=True)
     
     # Sidebar for Ingestion Controls
     with st.sidebar:
-        st.markdown('<div class="sidebar-header">🛠️ Ingestion Control Center</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-header">\U0001f6e0\ufe0f Ingestion Control Center</div>', unsafe_allow_html=True)
         
         # Tabs for URLs vs Files
         source_tab = st.radio("Choose Input Type:", ["Web URLs", "File Uploads", "Both"], horizontal=True)
@@ -259,7 +265,7 @@ def main():
         uploaded_files = []
         
         if source_tab in ["Web URLs", "Both"]:
-            st.markdown("#### 🌐 Web URLs")
+            st.markdown("#### \U0001f310 Web URLs")
             default_urls_str = "\n".join(Config.DEFAULT_URLS)
             urls_input = st.text_area(
                 "Enter URLs (one per line):",
@@ -269,14 +275,14 @@ def main():
             )
             
         if source_tab in ["File Uploads", "Both"]:
-            st.markdown("#### 📄 Local Files")
+            st.markdown("#### \U0001f4c4 Local Files")
             uploaded_files = st.file_uploader(
                 "Upload files (PDF, DOCX, TXT, MD, CSV, XLSX):",
                 accept_multiple_files=True,
                 type=["pdf", "docx", "txt", "md", "csv", "xlsx"]
             )
             
-        st.markdown('<div class="sidebar-header" style="margin-top: 1.5rem;">⚙️ Settings</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-header" style="margin-top: 1.5rem;">\u2699\ufe0f Settings</div>', unsafe_allow_html=True)
         
         # Chunking strategy and slider configurations
         strategy_name = st.selectbox(
@@ -291,38 +297,49 @@ def main():
         with col2:
             chunk_overlap = st.slider("Overlap:", 0, 500, Config.CHUNK_OVERLAP, 10)
             
+        search_type_choice = st.selectbox(
+            "Search Type:",
+            ["Similarity Search", "Maximal Marginal Relevance (MMR)"],
+            help="Similarity Search retrieves based on nearest vector. MMR balances relevance and diversity."
+        )
+            
         st.markdown("---")
         
         # Build button
-        build_db = st.button("🚀 Build RAG Database")
+        build_db = st.button("\U0001f680 Build RAG Database")
         if build_db:
             success = process_ingestion(
                 urls_input=urls_input,
                 uploaded_files=uploaded_files,
                 strategy_name=strategy_name,
                 chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap
+                chunk_overlap=chunk_overlap,
+                search_type_choice=search_type_choice
             )
             if success:
-                st.success(f"🎉 RAG database ready with {st.session_state.num_chunks} chunks!")
+                st.success(f"\U0001f389 RAG database ready with {st.session_state.num_chunks} chunks!")
                 st.toast("Database built successfully!")
                 
     # Main content panel
     if not st.session_state.initialized:
         # Inform user to build database
-        st.info("👈 **Please configure your data sources and click 'Build RAG Database' in the sidebar to initialize the search engine.**")
+        st.info("\U0001f448 **Please configure your data sources and click 'Build RAG Database' in the sidebar to initialize the search engine.**")
         
         # Beautiful feature list
         st.markdown("""
         ### Features of this Premium RAG Engine:
-        * 📁 **Multi-Source Support**: Ingest URLs, PDFs, Word docs, CSV, Excel sheets, TXT, and Markdown files.
-        * 🧠 **Dynamic Chunking**: Choose between standard **Recursive character chunking** and **Semantic chunking** using embeddings.
-        * 🔍 **Hybrid Retrieval**: Employs an Ensemble Retriever combining vector similarity search (Astra DB) and keyword search (BM25).
-        * 🤖 **Agentic Graph Workflow**: Powered by LangGraph to retrieve documents, reflect, and generate answers with Groq models.
+        * \U0001f4c4 **Multi-Source Ingestion**: Load Web URLs, PDFs, DOCX, CSV, Excel, TXT, and Markdown files.
+        * \U0001f9e0 **Dynamic Chunking**: Choose Recursive Character splitting or Semantic/Hybrid chunking via embeddings.
+        * \U0001f50d **Hybrid Retrieval & Reranking**: Combined Astra DB vector search + BM25 keywords, optimized by Cohere Reranking.
+        * \u21c4 **Flexible Search Type**: Toggle between Vector Similarity and Maximal Marginal Relevance (MMR) search dynamically.
+        * \U0001f916 **Adaptive LangGraph Workflow**: Autonomous query routing, document relevance grading, and hallucination checking.
+        * \U0001f6e1\ufe0f **Security Guardrails & PII**: Banned keyword blocking and automated PII masking (emails, credit cards, phones).
+        * \U0001f50e **External Search Fallback**: Seamless fallback to Tavily & Wikipedia MCP tools if local documents are insufficient.
+        * \U0001f4b0 **Precision Cost Tracking**: Custom callback handlers compute precise transaction costs for each search.
         """)
     else:
         # Search Box UI
-        st.success(f"🟢 Database Active: {st.session_state.num_chunks} chunks indexed (using {strategy_name} strategy).")
+        st.success(f"\U0001f7e2 Database Active: {st.session_state.num_chunks} chunks indexed (using {strategy_name} strategy).")
         
         with st.form("search_form"):
             col_in, col_btn = st.columns([5, 1])
@@ -338,9 +355,12 @@ def main():
                 
         # Handle Search Execution
         if submit and question:
-            with st.spinner("🔍 Agentic retrieval and answer generation in progress..."):
+            with st.spinner("\U0001f50d Agentic retrieval and answer generation in progress..."):
                 start_time = time.time()
                 try:
+                    if st.session_state.vector_store is not None:
+                        search_type = "mmr" if search_type_choice == "Maximal Marginal Relevance (MMR)" else "similarity"
+                        st.session_state.rag_system.nodes.retriever = st.session_state.vector_store.get_retriever(search_type=search_type)
                     result = asyncio.run(st.session_state.rag_system.run(question))
                     elapsed_time = time.time() - start_time
                     cost = result.get('total_cost', 0.0)
@@ -356,16 +376,16 @@ def main():
                     })
                     
                     # Display Answer
-                    st.markdown("### 💡 Generated Answer")
+                    st.markdown("### \U0001f4a1 Generated Answer")
                     st.markdown(f'<div class="answer-card">{result.get("answer", "No answer generated")}</div>', unsafe_allow_html=True)
                     
                     # Premium stats badge under answer card
                     st.markdown(
                         f"""
-                        <div style="display: flex; gap: 1.5rem; margin-top: -0.75rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #94a3b8; background-color: rgba(30, 41, 59, 0.4); padding: 0.5rem 1rem; border-radius: 0.375rem; width: fit-content; border: 1px solid #334155;">
-                            <span>⏱️ <strong>Latency:</strong> {elapsed_time:.2f}s</span>
-                            <span style="color: #475569;">|</span>
-                            <span>💰 <strong>Estimated Cost:</strong> <code style="color: #10b981; font-weight: bold; background: none; padding: 0;">{format_cost(cost)}</code></span>
+                        <div style="display: flex; gap: 1.5rem; margin-top: -0.75rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #f8fafc; background-color: #1e293b; padding: 0.5rem 1rem; border-radius: 0.375rem; width: fit-content; border: 1px solid #475569;">
+                            <span>\u23f1\ufe0f <strong>Latency:</strong> {elapsed_time:.2f}s</span>
+                            <span style="color: #64748b;">|</span>
+                            <span>\U0001f4b0 <strong>Estimated Cost:</strong> <code style="color: #34d399; font-weight: bold; background: none; padding: 0;">{format_cost(cost)}</code></span>
                         </div>
                         """,
                         unsafe_allow_html=True
@@ -381,14 +401,14 @@ def main():
                         st.markdown(
                             f"""
                             <div style="font-size: 0.9rem; color: #94a3b8; margin-top: -0.75rem; margin-bottom: 1.5rem;">
-                                🔗 <strong>External Citations:</strong> {" • ".join(links)}
+                                \U0001f517 <strong>External Citations:</strong> {" \u2022 ".join(links)}
                             </div>
                             """,
                             unsafe_allow_html=True
                         )
                     
                     # Source documents display
-                    st.markdown("### 📄 Retrieved Source Documents")
+                    st.markdown("### \U0001f4c4 Retrieved Source Documents")
                     retrieved_docs = result.get('retrieved_docs', [])
                     if retrieved_docs:
                         for i, doc in enumerate(retrieved_docs, 1):
@@ -403,13 +423,13 @@ def main():
                         st.info("No reference documents found.")
                         
                 except Exception as e:
-                    st.error(f"❌ Error during retrieval/generation: {str(e)}")
+                    st.error(f"\u274c Error during retrieval/generation: {str(e)}")
                     logging.exception("Search workflow error")
                     
         # History panel
         if st.session_state.history:
             st.markdown("---")
-            st.markdown("### 📜 Recent Search History")
+            st.markdown("### \U0001f4dc Recent Search History")
             for idx, item in enumerate(reversed(st.session_state.history[-3:])):
                 item_cost = item.get('cost', 0.0)
                 st.markdown(
