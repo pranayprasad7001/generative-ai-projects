@@ -1,7 +1,6 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
 import logging
-import json
 import re
 from typing import List
 from state.adaptive_state import AdaptiveRAGState
@@ -371,13 +370,6 @@ class AdaptiveRAGNodes:
         logger.debug("Answer relevance reasoning: %s", state.analysis)
         return state
 
-    def query_security_router(self, state: AdaptiveRAGState) -> str:
-        """Route the workflow based on the input security check."""
-
-        if state.query_blocked:
-            return "end"
-
-        return "query_analyzer"
 
     def query_router(self, state: AdaptiveRAGState) -> str:
         """
