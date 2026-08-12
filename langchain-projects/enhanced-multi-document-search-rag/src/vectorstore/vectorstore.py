@@ -5,7 +5,7 @@ from typing import List
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
 from langchain_community.retrievers import BM25Retriever
-from langchain_classic.retrievers import EnsembleRetriever
+from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
 from langchain_classic.schema import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 
@@ -21,6 +21,7 @@ class VectorStoreManager:
         self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name=Config.ASTRA_DB_COLLECTION_NAME, token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
         self.bm25_retriever = None
         self.ensemble_retriever = None
+        self.compression_retriever = None
         self.retriever = None
         self.documents = []
         self._current_k = None
@@ -89,7 +90,7 @@ class VectorStoreManager:
             raise ValueError("No documents provided to add to vectorstore.")
         return self.vectorstore
 
-    def create_retriever(self, vectorstore: AstraDBVectorStore, k: int = 4, search_type: str = "similarity") -> EnsembleRetriever :
+    def create_retriever(self, vectorstore: AstraDBVectorStore, k: int = 4, search_type: str = "similarity") -> ContextualCompressionRetriever :
         """
         Create a retriever from vector store
         Args:
@@ -99,7 +100,7 @@ class VectorStoreManager:
         Returns:
             Retriever: Retriever
         """
-        if self.ensemble_retriever is None or self._current_k != k or self._current_search_type != search_type:
+        if self.compression_retriever is None or self._current_k != k or self._current_search_type != search_type:
             if vectorstore is None:
                 logger.error("Cannot create retriever; vectorstore is not initialized.")
                 raise ValueError("No vectorstore found, please create or load a vectorstore first.")
@@ -116,10 +117,14 @@ class VectorStoreManager:
                 
             self.bm25_retriever.k = k
             self.ensemble_retriever = EnsembleRetriever(retrievers=[self.retriever, self.bm25_retriever], weights=[0.7, 0.3])
+            self.compression_retriever = ContextualCompressionRetriever(
+                base_compressor=self.cohere_reranker,
+                base_retriever=self.ensemble_retriever
+            )
             self._current_k = k
             self._current_search_type = search_type
             
-        return self.ensemble_retriever
+        return self.compression_retriever
     
     def rerank_documents(self, query: str, documents: List[Document]) -> List[Document]:
         """
@@ -147,16 +152,16 @@ class VectorStoreManager:
             logger.exception("Failed to rerank. Returning original documents.")
             return documents
 
-    def get_retriever(self, k: int = 4, search_type: str = "similarity") -> EnsembleRetriever:
+    def get_retriever(self, k: int = 4, search_type: str = "similarity") -> ContextualCompressionRetriever:
         """
         Get the ensemble retriever, initializing it if necessary.
         """
-        if self.ensemble_retriever is None or self._current_k != k or self._current_search_type != search_type:
+        if self.compression_retriever is None or self._current_k != k or self._current_search_type != search_type:
             if self.vectorstore is None:
                 logger.error("Cannot get retriever; vectorstore is not initialized.")
                 raise ValueError("No vectorstore found, please create or load a vectorstore first.")
             self.create_retriever(self.vectorstore, k=k, search_type=search_type)
-        return self.ensemble_retriever
+        return self.compression_retriever
         
     def retrieve(self, query: str, k: int = 4, search_type: str = "similarity") -> List[Document]:
         """
