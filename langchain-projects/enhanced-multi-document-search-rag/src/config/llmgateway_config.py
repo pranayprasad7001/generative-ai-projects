@@ -4,6 +4,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 # Load environment variables
 load_dotenv()
@@ -103,6 +104,10 @@ class Config:
     @classmethod
     def get_llm(cls):
         """Initialize LLM through LiteLLM Gateway."""
+        rate_limiter = InMemoryRateLimiter(
+            requests_per_second=cls.LLM_RATE_LIMITER,
+            max_bucket_size=100
+        )
         return ChatOpenAI(
             model=cls.LLM_MODEL,
             api_key=cls.LITELLM_API_KEY,
@@ -111,6 +116,6 @@ class Config:
             top_p=cls.LLM_TOP_P,
             max_tokens=cls.LLM_MAX_TOKENS,
             include_response_headers=True,
-            rate_limiter=cls.LLM_RATE_LIMITER,
+            rate_limiter=rate_limiter,
             max_retries=cls.MAX_RETRIES
         )
