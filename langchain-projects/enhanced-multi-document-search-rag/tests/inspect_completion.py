@@ -8,7 +8,7 @@ payload = {
     "temperature": 0.2
 }
 headers = {
-    "Authorization": "Bearer sk-YXiU7zUKdmyJOUd-WHPv8frL1E50M9R8iAfDG_20S4Q",
+    "Authorization": "Bearer ------------",
     "Content-Type": "application/json"
 }
 

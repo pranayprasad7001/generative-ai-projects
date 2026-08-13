@@ -14,7 +14,7 @@ class ToolUse(BaseModel):
     tool_type: str = Field(description="Must be either 'vector_search' or 'external_search'")
 
 base_url = "http://127.0.0.1:4000"
-api_key = os.getenv("LITELLM_MASTER_KEY") or "sk-YXiU7zUKdmyJOUd-WHPv8frL1E50M9R8iAfDG_20S4Q"
+api_key = os.getenv("LITELLM_MASTER_KEY") or "---------------------------"
 
 print("Initializing ChatOpenAI with gpt-oss-120b-groq...")
 llm = ChatOpenAI(
