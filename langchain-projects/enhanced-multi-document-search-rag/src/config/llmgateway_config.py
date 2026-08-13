@@ -71,7 +71,7 @@ class Config:
     # LiteLLM
     LITELLM_BASE_URL = os.getenv(
         "LITELLM_BASE_URL",
-        "http://localhost:4000"
+        "http://127.0.0.1:4000"
     )
 
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
