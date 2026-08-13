@@ -1,36 +1,36 @@
 # Generative AI Projects
 
-A growing collection of practical **Generative AI and AI Engineering projects** built with modern LLM frameworks, RAG architectures, AI agents, tool calling, LangGraph, CrewAI, vector databases, MCP, LLM gateways, guardrails, and observability.
+A growing portfolio of practical **Generative AI and AI Engineering projects** built with modern LLM frameworks, RAG architectures, AI agents, tool calling, LangGraph, CrewAI, vector databases, MCP, LLM gateways, guardrails, semantic caching, observability, and cost tracking.
 
-The repository documents my progression from foundational LLM applications to increasingly sophisticated **production-oriented GenAI systems**.
+The repository documents a progression from foundational LLM applications toward increasingly **adaptive, reliable, safety-aware, and production-oriented AI systems**.
 
-Each project is independently structured and includes its own README with architecture, setup instructions, implementation details, and technology choices.
+Each project is independently structured with its own README covering architecture, setup, implementation details, and technology choices.
 
 ---
 
 ## 🧭 What This Repository Covers
 
-The projects in this repository explore different areas of modern Generative AI engineering:
+- LLM Applications
+- Retrieval-Augmented Generation (RAG)
+- Adaptive / Self-Correcting RAG
+- Hybrid Search & Reranking
+- Similarity Search & MMR
+- AI Agents & Tool Calling
+- LangGraph Workflows
+- Multi-Agent Systems with CrewAI
+- MCP-based Tool Integration
+- Conversational AI
+- SQL Agents
+- Local LLM Applications
+- Semantic Caching
+- LLM Gateways & Model Routing
+- Safety Guardrails & PII Protection
+- LLM Cost Tracking
+- LangSmith Observability
+- Streamlit & Gradio Applications
+- Component-level testing
 
-- **LLM Applications**
-- **Retrieval-Augmented Generation (RAG)**
-- **Adaptive / Self-Correcting RAG**
-- **Hybrid Search & Reranking**
-- **AI Agents & Tool Calling**
-- **LangGraph Workflows**
-- **Multi-Agent Systems with CrewAI**
-- **MCP-based Tool Integration**
-- **Conversational AI**
-- **SQL Agents**
-- **Local LLM Applications**
-- **Semantic Caching**
-- **LLM Gateways & Model Routing**
-- **Safety Guardrails & PII Protection**
-- **LLM Cost Tracking**
-- **LangSmith Observability**
-- **Streamlit & Gradio Applications**
-
-The goal is not simply to demonstrate that an LLM can generate an answer, but to explore how GenAI systems can be made **more reliable, grounded, observable, secure, cost-aware, and maintainable**.
+The goal is not simply to demonstrate that an LLM can generate an answer, but to explore how GenAI systems can be made **grounded, reliable, observable, secure, cost-aware, testable, and maintainable**.
 
 ---
 
@@ -38,44 +38,48 @@ The goal is not simply to demonstrate that an LLM can generate an answer, but to
 
 ## 🔥 Enhanced Multi-Document Search RAG
 
-**Advanced adaptive RAG system using LangGraph, hybrid retrieval, reranking, MCP, LiteLLM, Redis semantic caching, and multi-layer guardrails.**
+**Adaptive, self-correcting RAG system and the most advanced project in this repository.**
 
-This is currently the most advanced RAG project in the repository.
+It combines LangGraph orchestration, hybrid retrieval, configurable Similarity/MMR search, Cohere reranking, MCP external search, LiteLLM routing, Redis semantic caching, multi-layer guardrails, PII protection, cost tracking, and component-level testing.
 
 ### Highlights
 
 - Conditional LangGraph `StateGraph`
 - Multi-format document ingestion
 - Recursive, semantic, and hybrid chunking
+- Google `gemini-embedding-2`
 - AstraDB vector retrieval
+- Similarity Search
+- Maximal Marginal Relevance (MMR)
 - BM25 keyword retrieval
-- Dense + keyword ensemble retrieval
+- Dense + lexical ensemble retrieval
 - Cohere reranking
 - Query rewriting
 - Document relevance grading
 - Hallucination detection
 - Answer relevance grading
 - MCP-based external search
-- Tavily, Wikipedia, and arXiv tools
+- Tavily, Wikipedia, and arXiv
 - Redis semantic caching
 - LiteLLM gateway
-- Model routing and fallback
+- Model routing and provider fallback
 - Per-query latency and cost tracking
 - PII middleware
-- Input/output security guardrails
+- Input/output guardrails
 - Tool-call and tool-result filtering
-- LangGraph Studio support
+- LangGraph Studio
 - Streamlit interface
+- Component-level unit tests
 
-**Status:** Core system functional; evaluation, automated testing, CI/CD, and deployment hardening are ongoing.
+**Status:** Core system functional; automated evaluation, integration testing, CI/CD, and deployment hardening remain in progress.
 
-[View Enhanced Multi-Document Search RAG →](./langchain-projects/enhanced-multi-document-search-rag)
+👉 [View Enhanced Multi-Document Search RAG](./langchain-projects/enhanced-multi-document-search-rag)
 
 ---
 
 ## 🤖 Agentic Search Engine
 
-Tool-calling search agent that dynamically uses external search capabilities to answer questions.
+A tool-calling search agent that dynamically uses external search capabilities to answer user questions.
 
 ### Highlights
 
@@ -91,9 +95,9 @@ Tool-calling search agent that dynamically uses external search capabilities to 
 
 **Status:** Deployed
 
-[View Agentic Search Engine →](./langchain-projects/agentic-search-engine)
+👉 [View Agentic Search Engine](./langchain-projects/agentic-search-engine)
 
-[Live Demo →](https://agentic-search-engine-with-exa.streamlit.app)
+🚀 [Live Demo](https://agentic-search-engine-with-exa.streamlit.app)
 
 ---
 
@@ -104,30 +108,30 @@ Natural-language interface for querying SQL databases through an agent.
 ### Highlights
 
 - Natural language → SQL
-- SQLite / MySQL support
+- SQLite / MySQL
 - Tool-calling agent
-- Read-only database enforcement
+- Read-only database access
 - SQL safety controls
 - Prompt-injection awareness
 - Streamlit interface
 
 **Status:** Deployed
 
-[View SQL Chat Assistant →](./langchain-projects/sql-chat-assistant)
+👉 [View SQL Chat Assistant](./langchain-projects/sql-chat-assistant)
 
-[Live Demo →](https://sql-db-chat-assistant.streamlit.app)
+🚀 [Live Demo](https://sql-db-chat-assistant.streamlit.app)
 
 ---
 
 ## 💬 Conversational PDF Assistant
 
-A conversational RAG application that allows users to interact with uploaded PDF documents while maintaining conversation context.
+A conversational RAG application for interacting with uploaded PDF documents while maintaining conversation context.
 
 ### Highlights
 
 - PDF ingestion
 - Vector retrieval
-- Conversational history
+- Conversation history
 - History-aware retrieval
 - Follow-up question handling
 - Source-aware answers
@@ -135,9 +139,9 @@ A conversational RAG application that allows users to interact with uploaded PDF
 
 **Status:** Deployed
 
-[View Conversational PDF Assistant →](./langchain-projects/conversational-pdf-assistant)
+👉 [View Conversational PDF Assistant](./langchain-projects/conversational-pdf-assistant)
 
-[Live Demo →](https://conversational-pdf-assistant.streamlit.app)
+🚀 [Live Demo](https://conversational-pdf-assistant.streamlit.app)
 
 ---
 
@@ -156,20 +160,20 @@ Multi-document RAG application using AstraDB as the vector database.
 
 **Status:** Deployed
 
-[View AstraDB Multi-Doc RAG Hub →](./langchain-projects/astradb-multidoc-rag-hub)
+👉 [View AstraDB Multi-Doc RAG Hub](./langchain-projects/astradb-multidoc-rag-hub)
 
-[Live Demo →](https://astradb-multidoc-rag.streamlit.app)
+🚀 [Live Demo](https://astradb-multidoc-rag.streamlit.app)
 
 ---
 
 ## 📄 Research Paper Assistant
 
-RAG application designed for querying research papers.
+RAG application for querying research papers using persistent vector storage.
 
 ### Highlights
 
 - Research paper ingestion
-- Chroma vector store
+- ChromaDB
 - Persistent vector storage
 - Retrieval-based question answering
 - Visible source chunks
@@ -177,9 +181,9 @@ RAG application designed for querying research papers.
 
 **Status:** Deployed
 
-[View Research Paper Assistant →](./langchain-projects/research-paper-assistant-rag)
+👉 [View Research Paper Assistant](./langchain-projects/research-paper-assistant-rag)
 
-[Live Demo →](https://interactive-research-paper-assistant.streamlit.app)
+🚀 [Live Demo](https://interactive-research-paper-assistant.streamlit.app)
 
 ---
 
@@ -197,28 +201,29 @@ An agent that dynamically selects tools depending on the user's question.
 
 **Status:** Deployed
 
-[View Math & Reasoning Agent →](./langchain-projects/math-reasoning-agent)
+👉 [View Math & Reasoning Agent](./langchain-projects/math-reasoning-agent)
 
-[Live Demo →](https://math-reasoning-agent.streamlit.app)
+🚀 [Live Demo](https://math-reasoning-agent.streamlit.app)
 
 ---
 
 ## 🧠 Intelligent Query Router
 
-A LangGraph-based routing system that analyzes a question and dynamically selects the appropriate information source.
+A LangGraph-based routing system that classifies a question and dynamically selects the appropriate information source.
 
 ```text
-User Query
-     │
-     ▼
-Query Classification
-     │
- ┌───┼────────┐
- ▼   ▼        ▼
-AstraDB  Wikipedia  arXiv
-     │
-     ▼
-Grounded Answer
+                    User Query
+                        │
+                        ▼
+                 Query Classification
+                        │
+             ┌──────────┼──────────┐
+             ▼          ▼          ▼
+          AstraDB   Wikipedia    arXiv
+             │          │          │
+             └──────────┼──────────┘
+                        ▼
+                  Grounded Answer
 ```
 
 ### Highlights
@@ -234,7 +239,7 @@ Grounded Answer
 
 **Status:** Runs locally
 
-[View Intelligent Query Router →](./langchain-projects/intelligent-query-router)
+👉 [View Intelligent Query Router](./langchain-projects/intelligent-query-router)
 
 ---
 
@@ -246,14 +251,14 @@ A local coding assistant powered by Ollama.
 
 - Local LLM inference
 - Ollama
-- Gradio interface
+- Gradio
 - Offline operation
 - Multiple programming languages
-- Two iterations: basic → improved UI
+- Iterative UI improvements
 
 **Status:** Runs locally
 
-[View Multi-Language Code Assistant →](./langchain-projects/multi-language-code-assistant)
+👉 [View Multi-Language Code Assistant](./langchain-projects/multi-language-code-assistant)
 
 ---
 
@@ -261,7 +266,7 @@ A local coding assistant powered by Ollama.
 
 Summarizes long-form web content and YouTube transcripts.
 
-The application dynamically chooses between different summarization strategies depending on content length.
+The application selects different summarization strategies depending on content length.
 
 ### Highlights
 
@@ -274,15 +279,15 @@ The application dynamically chooses between different summarization strategies d
 
 **Status:** Deployed
 
-[View URL Content Summarizer →](./langchain-projects/url-content-summarizer)
+👉 [View URL Content Summarizer](./langchain-projects/url-content-summarizer)
 
-[Live Demo →](https://url-content-summarizer.streamlit.app)
+🚀 [Live Demo](https://url-content-summarizer.streamlit.app)
 
 ---
 
 ## 💬 Q&A Chatbot with Groq
 
-The original project in this repository and the foundation for later experimentation with LangChain and LLM applications.
+The foundational project in this repository and an early exploration of LangChain-based LLM applications.
 
 ### Highlights
 
@@ -294,9 +299,9 @@ The original project in this repository and the foundation for later experimenta
 
 **Status:** Deployed
 
-[View Q&A Chatbot →](./langchain-projects/qa-chatbot)
+👉 [View Q&A Chatbot](./langchain-projects/qa-chatbot)
 
-[Live Demo →](https://question-answer-chatbot-groq.streamlit.app)
+🚀 [Live Demo](https://question-answer-chatbot-groq.streamlit.app)
 
 ---
 
@@ -335,7 +340,7 @@ A multi-agent CrewAI workflow that researches current information and produces a
 
 **Status:** Working end-to-end
 
-[View Agentic Daily Briefing →](./crewai-projects/agentic-daily-briefing)
+👉 [View Agentic Daily Briefing](./crewai-projects/agentic-daily-briefing)
 
 ---
 
@@ -345,7 +350,6 @@ A multi-agent CrewAI workflow that researches current information and produces a
 generative-ai-projects/
 │
 ├── langchain-projects/
-│   │
 │   ├── enhanced-multi-document-search-rag/
 │   ├── agentic-search-engine/
 │   ├── conversational-pdf-assistant/
@@ -359,14 +363,13 @@ generative-ai-projects/
 │   └── qa-chatbot/
 │
 ├── crewai-projects/
-│   │
 │   └── agentic-daily-briefing/
 │
 ├── LICENSE
 └── README.md
 ```
 
-The repository currently contains **11 LangChain projects and 1 CrewAI project**.
+**Current portfolio:** 11 LangChain projects + 1 CrewAI project.
 
 ---
 
@@ -387,11 +390,14 @@ The repository currently contains **11 LangChain projects and 1 CrewAI project**
 - Ollama
 - Open-source / local models
 
-## Retrieval & RAG
+## RAG & Retrieval
 
 - AstraDB
 - ChromaDB
 - BM25
+- Dense retrieval
+- Similarity Search
+- MMR
 - Hybrid retrieval
 - Ensemble retrieval
 - Cohere reranking
@@ -404,7 +410,7 @@ The repository currently contains **11 LangChain projects and 1 CrewAI project**
 
 - Tool-calling agents
 - ReAct agents
-- LangGraph agents
+- LangGraph workflows
 - CrewAI multi-agent workflows
 - MCP-based tools
 
@@ -441,73 +447,75 @@ The repository currently contains **11 LangChain projects and 1 CrewAI project**
 - Streamlit
 - Gradio
 
-## Observability
+## Observability & Testing
 
 - LangSmith
 - Application logging
 - Latency tracking
 - LLM cost tracking
+- Component-level unit tests
 
 ---
 
 # 📈 Project Progression
 
-The projects represent an intentional progression in complexity.
+The projects represent an intentional progression in GenAI engineering:
 
 ```text
-                    Foundation
-                        │
-                        ▼
-                Q&A Chatbot
-                        │
-                        ▼
-                RAG Applications
-                        │
-             ┌──────────┴──────────┐
-             ▼                     ▼
-       PDF / Research         Multi-Document
-            RAG                    RAG
-             │                     │
-             └──────────┬──────────┘
-                        ▼
-                 Query Routing
-                        │
-                        ▼
-                  AI Agents
-                        │
-                        ▼
-                 Tool Calling
-                        │
-                        ▼
-                 Multi-Agent
-                        │
-                        ▼
-             Adaptive / Agentic RAG
-                        │
-                        ▼
-              Production Concerns
-                        │
-       ┌────────────────┼────────────────┐
-       ▼                ▼                ▼
-   Guardrails        Caching         Cost Tracking
-       │                │                │
-       └────────────────┼────────────────┘
-                        ▼
-                 Evaluation
-                        │
-                        ▼
-                Deployment / CI
+                         Foundation
+                             │
+                             ▼
+                      Q&A Chatbot
+                             │
+                             ▼
+                     RAG Applications
+                             │
+              ┌──────────────┴──────────────┐
+              ▼                             ▼
+       PDF / Research                  Multi-Document
+             RAG                            RAG
+              │                             │
+              └──────────────┬──────────────┘
+                             ▼
+                      Query Routing
+                             │
+                             ▼
+                         AI Agents
+                             │
+                             ▼
+                       Tool Calling
+                             │
+                             ▼
+                      Multi-Agent
+                             │
+                             ▼
+                 Adaptive / Agentic RAG
+                             │
+                             ▼
+                  Reliability Engineering
+                             │
+             ┌───────────────┼───────────────┐
+             ▼               ▼               ▼
+         Guardrails       Caching       Cost Tracking
+             │               │               │
+             └───────────────┼───────────────┘
+                             ▼
+                         Testing
+                             │
+                             ▼
+                         Evaluation
+                             │
+                             ▼
+                     Deployment / CI
 ```
 
-The projects are therefore not intended to be a collection of unrelated demos. They document an ongoing progression from **basic LLM applications toward more reliable and production-oriented AI systems**.
+The repository is therefore not intended to be a collection of unrelated demos. It documents an ongoing progression from basic LLM applications toward more reliable and production-oriented AI systems.
 
 ---
 
 # 🛡️ Reliability & Evaluation Roadmap
 
-The repository has evolved from experimentation toward production-oriented engineering.
-
-Several projects already include reliability mechanisms such as:
+Several projects already implement reliability mechanisms including:
 
 - Input/output guardrails
 - PII protection
@@ -520,10 +528,11 @@ Several projects already include reliability mechanisms such as:
 - Semantic caching
 - LLM cost tracking
 - Provider fallback
+- Component-level tests
 
-The next focus is making these systems measurable.
+The next focus is making system behavior **measurable and reproducible**.
 
-### Evaluation
+## Evaluation
 
 - [ ] Build reusable evaluation datasets
 - [ ] Add RAGAS evaluations
@@ -531,18 +540,22 @@ The next focus is making these systems measurable.
 - [ ] Measure answer faithfulness
 - [ ] Measure answer relevance
 - [ ] Compare RAG architectures through ablation studies
-- [ ] Benchmark latency and cost
+- [ ] Compare Similarity vs MMR
+- [ ] Benchmark retrieval latency
+- [ ] Benchmark end-to-end latency
+- [ ] Benchmark cost / quality trade-offs
 
-### Engineering
+## Engineering
 
-- [ ] Expand automated unit tests
-- [ ] Add graph-routing tests
-- [ ] Add integration tests
+- [x] Component-level unit tests in the advanced RAG project
+- [ ] Expand integration tests
+- [ ] Add graph-routing regression tests
 - [ ] Add GitHub Actions CI
 - [ ] Containerize selected applications
 - [ ] Add FastAPI service layers where appropriate
+- [ ] Production deployment hardening
 
-### Optimization
+## Optimization
 
 - [x] LiteLLM gateway integration
 - [x] Provider routing / fallback
@@ -550,13 +563,13 @@ The next focus is making these systems measurable.
 - [x] Per-query cost tracking
 - [ ] Cache hit-rate benchmarking
 - [ ] Retrieval latency benchmarking
-- [ ] Cost / quality trade-off analysis
+- [ ] Quality / cost trade-off analysis
 
 ---
 
 # 🎯 Engineering Focus
 
-The main focus of this repository is learning and implementing the engineering principles required to build modern GenAI applications:
+The repository focuses on the engineering principles required to build modern GenAI applications.
 
 ### 1. Grounding
 
@@ -568,21 +581,25 @@ Validate retrieval quality, detect hallucinations, and retry or reroute when nec
 
 ### 3. Safety
 
-Protect users, tools, retrieved content, and generated outputs with multiple layers of validation.
+Protect users, retrieved content, external tools, and generated outputs with multiple layers of validation.
 
 ### 4. Observability
 
-Track what the system retrieved, which tools were used, how long execution took, and how much the LLM calls cost.
+Track retrieval behavior, tool usage, latency, and LLM costs.
 
 ### 5. Cost Efficiency
 
-Use model routing, caching, bounded retries, and usage tracking to control inference costs.
+Use model routing, semantic caching, bounded retries, and usage tracking to control inference costs.
 
 ### 6. Modularity
 
 Separate ingestion, retrieval, orchestration, tools, prompts, state, and interfaces so individual components can evolve independently.
 
-### 7. Evaluation
+### 7. Testability
+
+Protect core components with automated tests before expanding toward integration and end-to-end evaluation.
+
+### 8. Evaluation
 
 Move beyond qualitative demonstrations and measure whether architectural changes actually improve system performance.
 
@@ -590,7 +607,7 @@ Move beyond qualitative demonstrations and measure whether architectural changes
 
 # 🧪 Development Philosophy
 
-These projects follow a simple progression:
+These projects follow a practical engineering loop:
 
 ```text
 Build
@@ -602,6 +619,8 @@ Experiment
 Identify Failure Modes
   ↓
 Add Reliability
+  ↓
+Test
   ↓
 Measure
   ↓
@@ -630,29 +649,26 @@ Navigate to the desired project:
 cd generative-ai-projects/<project-folder>/<project-name>
 ```
 
-Then follow the project's individual `README.md`.
+Then follow that project's individual `README.md`.
 
-Most projects use:
+There is intentionally **no single universal startup command** for the entire repository. Projects may use:
 
-```bash
-pip install -r requirements.txt
-```
+- `pip`
+- `uv`
+- Streamlit
+- Gradio
+- LangGraph CLI
+- LiteLLM
+- Redis
+- MCP servers
+- AstraDB
+- other project-specific services
 
-and Streamlit-based projects can generally be started with:
-
-```bash
-streamlit run app.py
-```
-
-However, **do not assume every project follows the same startup command**. Some projects use `uv`, CLI entry points, or additional infrastructure such as LiteLLM, Redis, MCP servers, or external databases.
-
-Always refer to the individual project README for the exact setup.
+Always use the individual project README for exact setup instructions.
 
 ---
 
 # 🌐 Live Demos
-
-Several projects are available as live Streamlit applications.
 
 | Project | Demo |
 |---|---|
@@ -683,14 +699,15 @@ Several projects are available as live Streamlit applications.
 | Tool Integration | MCP / Web Search / Wikipedia / arXiv |
 | AI Infrastructure | LiteLLM, Redis Semantic Cache, Cost Tracking |
 | Safety | Guardrails, PII Protection, Tool Filtering |
+| Testing | Component-level unit testing |
 
 ---
 
 # 🔗 Links
 
-- **GitHub:** [pranayprasad7001](https://github.com/pranayprasad7001)
-- **LinkedIn:** [Pranay Prasad](https://www.linkedin.com/in/pranayprasad7/)
-- **Streamlit Apps:** [View deployed applications](https://share.streamlit.io/user/pranayprasad7001)
+- [GitHub Profile](https://github.com/pranayprasad7001)
+- [LinkedIn](https://www.linkedin.com/in/pranayprasad7/)
+- [Streamlit Applications](https://share.streamlit.io/user/pranayprasad7001)
 
 ---
 
