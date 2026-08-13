@@ -1,180 +1,268 @@
 # Enhanced Multi-Document Search RAG
 
-> **Adaptive, self-correcting RAG system built with LangGraph, hybrid retrieval, reranking, MCP-based external search, LLM gateway routing, Redis semantic caching, and multi-layer safety guardrails.**
+> Adaptive, self-correcting RAG system built with LangGraph, hybrid
+> retrieval, configurable Similarity/MMR search, Cohere reranking,
+> MCP-based external search, LiteLLM model routing, Redis semantic
+> caching, multi-layer guardrails, and component-level testing.
 
-An advanced Retrieval-Augmented Generation system designed to go beyond a fixed `retrieve → generate` pipeline.
+An advanced Retrieval-Augmented Generation system designed to go beyond
+a fixed `retrieve → generate` pipeline.
 
-The system dynamically analyzes each query, chooses between local document retrieval and external search, grades retrieved context, rewrites weak queries, detects hallucinations, evaluates answer relevance, and escalates to external search when the local knowledge base cannot provide sufficient evidence.
+The system dynamically analyzes each query, retrieves and evaluates
+supporting documents, rewrites weak queries, verifies generated answers,
+escalates to external search when local retrieval is insufficient, and
+applies security controls throughout the workflow.
 
-The entire workflow is orchestrated as a conditional **LangGraph `StateGraph`**, with bounded retry loops and centralized LLM access through a **self-hosted LiteLLM gateway**.
+The application is exposed through a Streamlit interface, while the
+underlying workflow can also be inspected independently through
+LangGraph Studio.
 
----
+------------------------------------------------------------------------
 
-## ✨ What Makes This RAG Different?
+## Why This Project?
 
-Traditional RAG follows:
+A basic RAG system generally looks like:
 
-```text
+``` text
 Question
    ↓
-Retrieve
+Retrieve documents
    ↓
-Generate
-   ↓
-Answer
+Generate answer
 ```
 
-This project uses an adaptive workflow:
+This project treats retrieval and generation as potential failure points
+and introduces explicit mechanisms for retrieval grading, query
+rewriting, retrieval diversity, hybrid search, reranking, hallucination
+detection, answer relevance checking, external knowledge escalation,
+safety, caching, cost tracking, and bounded retries.
 
-```text
-                         ┌──────────────────────┐
-                         │ Input Security Check │
-                         └──────────┬───────────┘
-                                    │
-                                    ▼
-                           ┌─────────────────┐
-                           │  Query Analyzer │
-                           └────────┬────────┘
-                                    │
-                       ┌────────────┴────────────┐
-                       ▼                         ▼
-                Vector Search             External Search
-                       │                    MCP Tools
-                       ▼
-               Documents Grader
-                       │
-              ┌────────┴────────┐
-              │                 │
-           Relevant          Weak
-              │                 │
-              ▼                 ▼
-        Answer Generator   Query Rewriter
-              │                 │
-              ▼                 └──────► Vector Search
-      Hallucination Detector
+------------------------------------------------------------------------
+
+# Architecture
+
+``` text
+                           User Query
+                               │
+                               ▼
+                    Input Security Check
+                               │
+                    ┌──────────┴──────────┐
+                    │                     │
+                 Blocked                Safe
+                    │                     │
+                    ▼                     ▼
+                   END              Query Analyzer
+                                         │
+                              ┌──────────┴──────────┐
+                              │                     │
+                         Local RAG            External Search
+                              │                     │
+                              ▼                     ▼
+                       Dense Retrieval           MCP Agent
+                              │                ┌────┼────┐
+                              │                ▼    ▼    ▼
+                              │              Tavily Wiki arXiv
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+              Similarity               MMR
+                    │                   │
+                    └─────────┬─────────┘
+                              ▼
+                         BM25 Retrieval
+                              │
+                              ▼
+                       Ensemble Retrieval
+                         0.7 Dense
+                         0.3 BM25
+                              │
+                              ▼
+                       Cohere Reranking
+                              │
+                              ▼
+                       Document Grader
+                              │
+                    ┌─────────┴─────────┐
+                    │                   │
+                Relevant              Weak
+                    │                   │
+                    ▼                   ▼
+             Answer Generator     Query Rewriter
+                    │                   │
+                    ▼                   └────► Retrieval
+          Hallucination Detector
+                    │
+              ┌─────┴─────┐
+              │           │
+           Grounded    Ungrounded
+              │           │
+              ▼           ▼
+      Answer Relevance  Regenerate
               │
-       ┌──────┴───────┐
-       │              │
-    Grounded      Ungrounded
-       │              │
-       ▼              ▼
- Answer Relevance   Regenerate
-       │
-       ├──────────────► External Search if retries exhausted
-       │
-       ▼
+        ┌─────┴─────┐
+        │           │
+     Relevant      Weak
+        │           │
+        ▼           └────► Query Rewriter
  Output Security Check
-       │
-       ▼
-      END
+        │
+        ▼
+     Final Answer
 ```
 
-Every self-correction loop is bounded to prevent uncontrolled execution.
+All self-correction loops are bounded.
 
----
+``` text
+MAX_REWRITES = 3
+MAX_GENERATIONS = 3
+```
 
-# 🚀 Key Features
+------------------------------------------------------------------------
+
+# Key Features
 
 ## 1. Adaptive LangGraph RAG
 
-The RAG pipeline is implemented as a conditional `StateGraph` rather than a linear chain.
+The workflow is implemented as a conditional LangGraph `StateGraph`.
 
-### Current graph nodes
+Current graph nodes:
 
-- `input_query_security_check`
-- `query_analyzer`
-- `vector_search`
-- `documents_grader`
-- `query_rewriter`
-- `answer_generator`
-- `hallucination_detector`
-- `answer_relevance_grader`
-- `external_search`
-- `output_answer_security_check`
+-   `input_query_security_check`
+-   `query_analyzer`
+-   `vector_search`
+-   `documents_grader`
+-   `query_rewriter`
+-   `answer_generator`
+-   `hallucination_detector`
+-   `answer_relevance_grader`
+-   `external_search`
+-   `output_answer_security_check`
 
-The graph uses conditional routing to determine what should happen next based on security checks, retrieval quality, hallucination detection, and answer relevance.
+Conditional routing uses input safety, query classification, retrieval
+quality, hallucination detection, answer relevance, retry limits, and
+external-search escalation.
 
-Retry loops are bounded using:
+------------------------------------------------------------------------
 
-- `MAX_REWRITES = 3`
-- `MAX_GENERATIONS = 3`
+## 2. Hybrid Retrieval
 
-This prevents infinite self-correction loops.
+The local retrieval system combines dense semantic retrieval and lexical
+retrieval.
 
----
-
-# 🔎 2. Hybrid Retrieval
-
-The local retrieval pipeline combines:
-
-```text
-                    User Query
-                        │
-             ┌──────────┴──────────┐
-             ▼                     ▼
-       Dense Retrieval          BM25
-          AstraDB            Keyword Search
-             │                     │
-             └──────────┬──────────┘
-                        ▼
-                 EnsembleRetriever
-                    0.7 / 0.3
-                        │
-                        ▼
-                Cohere Reranker
-                        │
-                        ▼
-                Final Documents
+``` text
+                         Query
+                           │
+              ┌────────────┴────────────┐
+              ▼                         ▼
+       Dense Retrieval                 BM25
+       AstraDB Vector Store       Keyword Retrieval
+              │
+       ┌──────┴──────┐
+       ▼             ▼
+ Similarity          MMR
+ Search              Search
+       │             │
+       └──────┬──────┘
+              ▼
+        EnsembleRetriever
+          Dense: 0.7
+          BM25:  0.3
+              │
+              ▼
+        Cohere Reranker
+              │
+              ▼
+       Final Context
 ```
 
-### Dense retrieval
+### Dense embeddings
 
-Uses:
+Current model:
 
-- AstraDB Vector Store
-- `BAAI/bge-base-en-v1.5`
+``` text
+gemini-embedding-2
+```
 
-### Keyword retrieval
+implemented with `GoogleGenerativeAIEmbeddings`.
 
-Uses:
+### Lexical retrieval
 
-- BM25
-- `rank_bm25`
+BM25 is implemented with `rank_bm25` through LangChain's
+`BM25Retriever`.
 
 ### Fusion
 
-```text
-Dense retrieval weight:   0.7
-BM25 weight:              0.3
+``` text
+Dense retrieval weight = 0.7
+BM25 weight            = 0.3
 ```
 
 ### Reranking
 
-Cohere `rerank-english-v3.0` is applied through a contextual compression retriever to improve the precision of the final retrieved context.
+Cohere `rerank-english-v3.0` is applied through
+`ContextualCompressionRetriever` after candidate retrieval and fusion.
 
----
+------------------------------------------------------------------------
 
-# 📚 3. Multi-Format Document Ingestion
+## 3. Similarity Search vs MMR
 
-The ingestion pipeline supports:
+The Streamlit UI lets the user choose:
 
-- PDF
-- DOCX
-- TXT
-- Markdown
-- CSV
-- XLSX
-- XLS
-- Web URLs
-- Directories containing supported files
+-   Similarity Search
+-   Maximal Marginal Relevance (MMR)
 
-Documents are normalized with standardized metadata including source, filename, file type, loader, and chunk information.
+### Similarity Search
 
----
+Retrieves documents based primarily on vector similarity to the query.
 
-# ✂️ 4. Multiple Chunking Strategies
+### MMR
 
-The application provides three chunking strategies:
+Balances query relevance with diversity among retrieved documents,
+helping reduce redundant results.
+
+The selected search type is applied to the AstraDB dense retriever. That
+dense retriever is then combined with BM25 and reranked.
+
+This makes it possible to compare:
+
+``` text
+Similarity + BM25 + Reranking
+```
+
+against:
+
+``` text
+MMR + BM25 + Reranking
+```
+
+------------------------------------------------------------------------
+
+## 4. Multi-Format Document Ingestion
+
+Supported sources:
+
+-   PDF
+-   DOCX
+-   TXT
+-   Markdown
+-   CSV
+-   XLSX
+-   XLS
+-   Web URLs
+-   Directories containing supported files
+
+Loaders include `WebBaseLoader`, `PyMuPDFLoader`, `TextLoader`,
+`Docx2txtLoader`, `CSVLoader`, and `UnstructuredExcelLoader`.
+
+Documents are enriched with metadata such as source, filename, file
+type, loader, and chunk number.
+
+------------------------------------------------------------------------
+
+## 5. Multiple Chunking Strategies
+
+Three strategies are available:
 
 ### Recursive
 
@@ -182,99 +270,122 @@ Uses `RecursiveCharacterTextSplitter`.
 
 ### Semantic
 
-Uses embedding-based semantic chunking.
+Uses `SemanticChunker` with the configured Google embedding model.
 
 ### Hybrid
 
-Combines semantic chunking followed by recursive splitting.
+Applies semantic chunking followed by recursive splitting.
 
-The Streamlit interface allows the user to configure:
+Markdown documents additionally use `MarkdownHeaderTextSplitter`.
 
-- Chunk size
-- Chunk overlap
-- Chunking strategy
+Default configuration:
 
-Default values:
-
-```text
-Chunk size:       500
-Chunk overlap:     50
+``` text
+Chunk size    = 500
+Chunk overlap = 50
 ```
 
----
+------------------------------------------------------------------------
 
-# ♻️ 5. Idempotent Document Ingestion
+## 6. Idempotent Document Ingestion
 
-The system prevents duplicate vector insertion using deterministic SHA-256 IDs generated from:
+Each chunk receives a deterministic SHA-256 ID derived from:
 
-```text
-source + document content
+``` text
+source + chunk content
 ```
 
-When the same document/chunk is ingested again:
+Before insertion, the ID is checked in AstraDB.
 
-```text
-Document
-   ↓
-SHA-256 ID
-   ↓
-Already exists?
-   ├── Yes → Skip
-   └── No  → Embed + Insert
+``` text
+Existing ID?
+   │
+ ┌─┴─┐
+Yes  No
+ │    │
+Skip Insert
 ```
 
-This makes repeated ingestion safe and avoids unnecessary duplicate vectors.
+This prevents unnecessary duplicate vectors when the same content is
+ingested repeatedly.
 
----
+------------------------------------------------------------------------
 
-# 🧠 6. Self-Correcting Retrieval
+## 7. Self-Correcting Retrieval
 
-Retrieved documents are evaluated before generation.
+Retrieved documents are graded before generation.
 
-If the retrieved context is insufficient:
-
-```text
+``` text
 Retrieve
    ↓
-Grade Documents
+Document Grader
    ↓
-Insufficient
-   ↓
-Rewrite Query
-   ↓
-Retrieve Again
+Sufficient?
+ ┌─┴──────────────┐
+Yes               No
+ │                 │
+ ▼                 ▼
+Generate       Query Rewrite
+                  │
+                  ▼
+               Retrieve
 ```
 
-After the maximum number of rewrites is reached, the system escalates to external search instead of repeatedly querying the same local knowledge base.
+The rewrite loop is bounded by `MAX_REWRITES`.
 
----
+If local retrieval remains insufficient, the workflow can escalate to
+external search.
 
-# 🛡️ 7. Multi-Layer Safety Guardrails
+------------------------------------------------------------------------
 
-Safety is implemented at multiple points in the system.
+## 8. Hallucination Detection & Answer Relevance
+
+Generated answers are verified after generation.
+
+``` text
+Generate
+   ↓
+Hallucination Detector
+   │
+ ┌─┴──────────┐
+Grounded   Ungrounded
+   │           │
+   ▼           ▼
+Continue    Regenerate
+```
+
+The answer is subsequently checked for relevance to the query. An
+irrelevant answer can route the workflow back toward query rewriting and
+retrieval.
+
+Generation is bounded by `MAX_GENERATIONS = 3`.
+
+------------------------------------------------------------------------
+
+## 9. Multi-Layer Safety Guardrails
+
+The system uses defense-in-depth.
 
 ### Input protection
 
-The system performs:
-
-- deterministic keyword filtering
-- LLM-based security classification
-- PII detection and protection
+1.  PII middleware
+2.  Deterministic content filtering
+3.  LLM-based security classification
 
 ### PII protection
 
-PII middleware currently handles patterns such as:
+Patterns include:
 
-- Email
-- Credit card
-- API keys
-- Phone numbers
-- IP addresses
-- SSNs
+-   email
+-   credit card
+-   API keys
+-   phone numbers
+-   IP addresses
+-   SSNs
 
-Different fields use different strategies including:
+Strategies include:
 
-```text
+``` text
 redact
 mask
 block
@@ -282,43 +393,45 @@ block
 
 ### Tool protection
 
-External MCP tool calls are intercepted so that:
-
-1. Tool arguments can be inspected.
-2. Unsafe requests can be blocked.
-3. Tool failures are handled safely.
-4. Unsafe tool results can be redacted before reaching the model.
+External MCP calls can be inspected and blocked, with tool failures
+handled and unsafe tool results filtered.
 
 ### Output protection
 
-Generated answers pass through an output security agent followed by deterministic post-processing.
+``` text
+Output Security Agent
+        ↓
+Deterministic Output Middleware
+        ↓
+Final Response
+```
 
----
+------------------------------------------------------------------------
 
-# 🌐 8. External Search via MCP
+## 10. MCP External Search
 
-When local retrieval cannot sufficiently answer a question, the system can escalate to external search.
+When local retrieval cannot sufficiently answer a query, the system can
+escalate to external search through MCP.
 
-MCP integrations currently include:
+Current integrations:
 
-- Tavily
-- Wikipedia
-- arXiv
+-   Tavily
+-   Wikipedia
+-   arXiv
 
-The external search agent is built using LangChain's modern `create_agent` API and `langchain-mcp-adapters`.
+The external search agent uses LangChain's `create_agent` API with
+`langchain-mcp-adapters`.
 
-The workflow is:
-
-```text
+``` text
 Local Retrieval
       ↓
-Insufficient?
+Insufficient
       ↓
 External Search Agent
       ↓
-MCP Tools
- ┌────┼────┐
- ▼    ▼    ▼
+MCP
+ ┌────┼─────┐
+ ▼    ▼     ▼
 Tavily Wiki arXiv
       │
       ▼
@@ -328,242 +441,301 @@ External Answer
 Citation Extraction
       │
       ▼
-Output Security Check
+Output Security
 ```
 
-External URLs returned by tool results are extracted and surfaced in the Streamlit interface.
+External URLs returned by tool results are surfaced in Streamlit.
 
----
+------------------------------------------------------------------------
 
-# 🚪 9. LiteLLM Gateway
+## 11. LiteLLM Gateway
 
-All application LLM calls are routed through a self-hosted LiteLLM proxy.
+LLM calls are routed through a self-hosted LiteLLM proxy.
 
-This provides a centralized abstraction layer between the application and model providers.
+Current application model:
 
-```text
-                    Application
-                         │
-                         ▼
-                  LiteLLM Gateway
-                         │
-              ┌──────────┴──────────┐
-              ▼                     ▼
-           Groq                  NVIDIA NIM
-       Configured models        Configured model
-```
-
-The current application default model is:
-
-```text
+``` text
 gpt-oss-120b-groq
 ```
 
-Additional configured models include:
+Configured models:
 
-- `gpt-oss-20b-groq`
-- `qwen3.6-27b-groq`
-- `nvidia-glm-5.2`
+``` text
+gpt-oss-120b-groq
+gpt-oss-20b-groq
+qwen3.6-27b-groq
+nvidia-glm-5.2
+```
 
-The LiteLLM router also contains retry and fallback configuration.
+Configured NVIDIA fallback chain:
 
-This architecture makes it possible to change providers/models without tightly coupling the application to a single vendor.
+``` text
+nvidia-glm-5.2
+      ↓
+gpt-oss-120b-groq
+      ↓
+gpt-oss-20b-groq
+```
 
----
+LiteLLM provides centralized model configuration, retries, timeout
+handling, fallback, caching, and cost support.
 
-# 💾 10. Redis Semantic Caching
+------------------------------------------------------------------------
 
-The project now includes **Redis-backed semantic caching through LiteLLM**.
+## 12. Redis Semantic Caching
 
-The current configuration uses:
+Semantic caching is implemented through LiteLLM and Redis.
 
-```text
+``` text
 Cache type:              redis-semantic
 Similarity threshold:    0.85
-TTL:                     1800 seconds
+TTL:                     1800 seconds / 30 minutes
 Cache embedding model:   Cohere Embed English v3
 ```
 
-`1800 seconds` = **30 minutes**.
+Caching is `default_off` at the gateway level and explicitly enabled for
+selected calls.
 
-The cache is configured as `default_off` at the gateway level and explicitly enabled for selected LLM calls that benefit from caching.
-
-For example, answer generation uses:
-
-```text
-use-cache = true
-TTL = 1800
+``` text
+Query
+  ↓
+Semantic Cache
+  │
+ ┌┴──────┐
+Hit     Miss
+ │        │
+ ▼        ▼
+Cached   LLM
+Answer   Call
+          │
+          ▼
+        Cache
 ```
 
-This allows semantically similar requests to reuse cached responses instead of repeatedly invoking the LLM.
+The goal is to reduce repeated LLM inference, latency, and cost for
+sufficiently similar requests.
 
----
+------------------------------------------------------------------------
 
-# 💰 11. Per-Query Cost Tracking
+## 13. LLM Cost Tracking
 
-Every RAG execution creates a `CostTrackingCallbackHandler`.
+Each RAG execution uses a `CostTrackingCallbackHandler`.
 
-The callback:
+It:
 
-1. Reads LiteLLM cost headers when available.
-2. Falls back to token-based `litellm.completion_cost()` calculation.
-3. Accumulates cost across multiple LLM calls.
-4. Returns the cumulative cost as `total_cost`.
+1.  Reads LiteLLM cost headers when available.
+2.  Falls back to token-based `litellm.completion_cost()`.
+3.  Accumulates cost across multiple LLM calls.
+4.  Exposes cumulative cost through `total_cost`.
 
-This means retries and additional model calls can contribute to the displayed request cost.
+Retries and self-correction calls can therefore contribute to the
+displayed request cost.
 
-The Streamlit UI displays:
+The UI displays:
 
-```text
-Latency
-Estimated Cost
-```
+-   latency
+-   estimated cost
 
-for each query.
+------------------------------------------------------------------------
 
----
+## 14. Reliability Controls
 
-# 📊 12. Observability
+The system includes:
 
-The application provides:
+-   bounded query rewriting
+-   bounded generation retries
+-   LiteLLM gateway retries
+-   application-level retries
+-   rate limiting
+-   external-search escalation
+-   reranker failure fallback
+-   graph construction exception handling
+-   idempotent ingestion
 
-- Python logging
-- Per-query latency
-- Per-query estimated cost
-- Retrieved document inspection
-- External citation inspection
-- Search history
-- Optional LangSmith tracing
+------------------------------------------------------------------------
 
-This makes it possible to inspect not only the final answer but also the supporting retrieval context and execution characteristics.
+## 15. Observability
 
----
+Current observability includes:
 
-# 🖥️ 13. Streamlit Interface
+-   Python logging
+-   per-query latency
+-   estimated LLM cost
+-   retrieved-document inspection
+-   external citation inspection
+-   search history
+-   optional LangSmith tracing
+-   LangGraph Studio inspection
 
-The Streamlit application provides:
+------------------------------------------------------------------------
 
-### Data ingestion
+## 16. Streamlit Application
 
-- Web URLs
-- File uploads
-- Both simultaneously
+The UI provides:
+
+### Inputs
+
+-   Web URLs
+-   File uploads
+-   Both
 
 ### Supported uploads
 
-```text
-PDF
-DOCX
-TXT
-MD
-CSV
-XLSX
+-   PDF
+-   DOCX
+-   TXT
+-   Markdown
+-   CSV
+-   XLSX
+
+### Chunking controls
+
+-   Recursive
+-   Semantic
+-   Hybrid
+-   Adjustable chunk size
+-   Adjustable overlap
+
+### Retrieval controls
+
+-   Similarity Search
+-   MMR
+
+### Query results
+
+-   Generated answer
+-   Retrieved source chunks
+-   External citations
+-   Search history
+-   Latency
+-   Estimated cost
+
+------------------------------------------------------------------------
+
+## 17. LangGraph Studio
+
+The graph is registered through:
+
+``` text
+langgraph.json
 ```
 
-### Retrieval configuration
+and exposed through:
 
-- Recursive chunking
-- Semantic chunking
-- Hybrid chunking
-- Adjustable chunk size
-- Adjustable overlap
-
-### Query interface
-
-- Question input
-- Generated answer
-- Retrieved source chunks
-- External citations
-- Latency
-- Estimated cost
-- Recent search history
-
----
-
-# 🔬 14. LangGraph Studio Support
-
-The graph is exposed independently through:
-
-```text
-langgraph.json
+``` text
 src/studio_graph.py
 ```
 
-This allows the RAG workflow to be loaded and inspected using LangGraph Studio / `langgraph dev`.
+Run:
 
-The graph can therefore be debugged independently from the Streamlit UI.
+``` bash
+langgraph dev
+```
 
----
+to inspect the graph independently of the Streamlit interface.
 
-# 🏗️ Architecture Components
+------------------------------------------------------------------------
 
-| Layer | Technology |
-|---|---|
-| Orchestration | LangGraph `StateGraph` |
-| LLM Interface | LangChain `ChatOpenAI` |
-| LLM Gateway | LiteLLM Proxy |
-| Primary Application Model | Groq `gpt-oss-120b` |
-| Additional Models | Groq `gpt-oss-20b`, Qwen, NVIDIA NIM |
-| Vector Database | AstraDB |
-| Embeddings | `BAAI/bge-base-en-v1.5` |
-| Keyword Retrieval | BM25 |
-| Retrieval Fusion | `EnsembleRetriever` |
-| Reranking | Cohere `rerank-english-v3.0` |
-| Semantic Cache | Redis Semantic Cache |
-| Cache Embeddings | Cohere Embed English v3 |
-| External Search | MCP |
-| External Tools | Tavily, Wikipedia, arXiv |
-| Guardrails | LangChain Agents + Middleware |
-| PII Protection | `PIIMiddleware` |
-| Observability | LiteLLM + optional LangSmith |
-| UI | Streamlit |
-| Graph Debugging | LangGraph Studio |
-| Package Management | uv |
+## 18. Unit Tests
 
----
+Component-level tests are included under `tests/`:
 
-# 📁 Project Structure
+``` text
+tests/
+├── test_adaptive_node.py
+├── test_chunker.py
+├── test_document_processor.py
+├── test_graph_builder.py
+└── test_vectorstore.py
+```
 
-```text
+Coverage includes adaptive node behavior, security checks, query
+analysis, graph construction/routing, chunking, document processing, and
+vector store behavior.
+
+------------------------------------------------------------------------
+
+# Technology Stack
+
+  Layer                Technology
+  -------------------- --------------------------------------------------
+  Orchestration        LangGraph `StateGraph`
+  LLM Interface        LangChain `ChatOpenAI`
+  LLM Gateway          LiteLLM Proxy
+  Application LLM      Groq `gpt-oss-120b`
+  Additional Models    Groq `gpt-oss-20b`, Qwen 3.6 27B, NVIDIA GLM 5.2
+  Vector Database      AstraDB
+  Embeddings           Google `gemini-embedding-2`
+  Dense Search         AstraDB Similarity / MMR
+  Keyword Search       BM25
+  Retrieval Fusion     `EnsembleRetriever`
+  Reranking            Cohere `rerank-english-v3.0`
+  Semantic Cache       Redis Semantic Cache
+  Cache Embeddings     Cohere Embed English v3
+  External Search      MCP
+  External Tools       Tavily, Wikipedia, arXiv
+  Safety               LangChain Agents + Middleware
+  PII Protection       `PIIMiddleware`
+  Cost Tracking        LiteLLM + custom callback
+  Observability        LangSmith + application logging
+  UI                   Streamlit
+  Graph Debugging      LangGraph Studio
+  Package Management   uv
+  Testing              Python component tests
+
+------------------------------------------------------------------------
+
+# Project Structure
+
+``` text
 enhanced-multi-document-search-rag/
 │
 ├── data/
-│   └── ...                         # Sample data / fixtures
+│   └── sample data / local fixtures
 │
 ├── legacy/
-│   └── ...                         # Earlier implementations kept for reference
+│   └── previous implementations
 │
 ├── src/
 │   ├── config/
-│   │   ├── cost_callback.py        # Per-run LLM cost tracking
-│   │   ├── litellm_config.yaml     # Model routing, fallback and Redis cache
-│   │   ├── llmgateway_config.py    # Runtime configuration + LLM client
-│   │   └── mcp_config.py           # MCP server/tool configuration
+│   │   ├── cost_callback.py
+│   │   ├── litellm_config.yaml
+│   │   ├── llmgateway_config.py
+│   │   └── mcp_config.py
 │   │
 │   ├── document_ingestion/
-│   │   ├── document_processor.py   # Multi-format loading
-│   │   └── chunker.py              # Recursive / semantic / hybrid chunking
-│   │
-│   ├── vectorstore/
-│   │   └── vectorstore.py          # AstraDB + BM25 + ensemble + reranking
-│   │
-│   ├── state/
-│   │   └── adaptive_state.py       # LangGraph state schema
-│   │
-│   ├── nodes/
-│   │   ├── adaptive_node.py        # RAG workflow nodes + routing
-│   │   ├── guardrails.py           # Security agents + middleware
-│   │   └── schema.py               # Structured output schemas
+│   │   ├── document_processor.py
+│   │   └── chunker.py
 │   │
 │   ├── graph_builder/
 │   │   └── adaptive_graph_builder.py
 │   │
+│   ├── nodes/
+│   │   ├── adaptive_node.py
+│   │   ├── guardrails.py
+│   │   └── schema.py
+│   │
 │   ├── prompts/
 │   │   └── rag_prompts.py
 │   │
-│   └── studio_graph.py              # LangGraph Studio entry point
+│   ├── state/
+│   │   └── adaptive_state.py
+│   │
+│   ├── vectorstore/
+│   │   └── vectorstore.py
+│   │
+│   └── studio_graph.py
 │
+├── tests/
+│   ├── test_adaptive_node.py
+│   ├── test_chunker.py
+│   ├── test_document_processor.py
+│   ├── test_graph_builder.py
+│   └── test_vectorstore.py
+│
+├── .python-version
 ├── langgraph.json
+├── main.py
 ├── streamlit_app.py
 ├── pyproject.toml
 ├── requirements.txt
@@ -571,58 +743,56 @@ enhanced-multi-document-search-rag/
 └── README.md
 ```
 
----
+------------------------------------------------------------------------
 
-# ⚙️ Setup
+# Setup
 
 ## Requirements
 
-- Python 3.13+
-- uv or pip
-- Node.js / `npx` for Tavily MCP
-- `uvx` for Wikipedia/arXiv MCP servers
-- Redis instance
-- AstraDB account
-- Cohere API key
-- Groq API key
-- Tavily API key
-- LiteLLM-compatible model provider credentials
+-   Python `>=3.13`
+-   uv or pip
+-   AstraDB account
+-   Google API key
+-   Groq API key
+-   Cohere API key
+-   Tavily API key
+-   Redis instance
+-   Node.js / `npx` for Tavily MCP
+-   `uvx` for Wikipedia/arXiv MCP
+-   LiteLLM-compatible provider configuration
 
----
+## Clone
 
-## 1. Clone the repository
-
-```bash
+``` bash
 git clone https://github.com/pranayprasad7001/generative-ai-projects.git
 
 cd generative-ai-projects/langchain-projects/enhanced-multi-document-search-rag
 ```
 
----
-
-## 2. Install dependencies
+## Install
 
 Using uv:
 
-```bash
+``` bash
 uv sync
 ```
 
-Or using pip:
+Or:
 
-```bash
+``` bash
 pip install -r requirements.txt
 ```
 
----
+## Environment Variables
 
-## 3. Configure environment variables
+Create `.env`:
 
-Create a `.env` file:
-
-```env
-# Groq
+``` env
+# LLM Providers
 GROQ_API_KEY=
+
+# Google Generative AI
+GOOGLE_API_KEY=
 
 # NVIDIA NIM
 NVIDIA_API_KEY=
@@ -643,293 +813,244 @@ COHERE_API_KEY=
 # Tavily
 TAVILY_API_KEY=
 
-# Redis semantic cache
+# Redis Semantic Cache
 REDIS_HOST=
 REDIS_PORT=6379
 REDIS_PASSWORD=
 
-# Optional LangSmith tracing
+# Optional LangSmith
 LANGSMITH_TRACING=
 LANGSMITH_API_KEY=
 LANGSMITH_PROJECT=
 ```
 
----
+## Start LiteLLM
 
-# 🧠 Start the LiteLLM Gateway
-
-The gateway uses:
-
-```text
-src/config/litellm_config.yaml
-```
-
-Run:
-
-```bash
+``` bash
 litellm --config src/config/litellm_config.yaml --port 4000
 ```
 
-The configuration contains:
+## Run Streamlit
 
-- Model definitions
-- Provider routing
-- Retry configuration
-- Fallback configuration
-- Redis semantic caching
-- Cache similarity threshold
-- Cache TTL
-
----
-
-# ▶️ Run the Streamlit Application
-
-In a separate terminal:
-
-```bash
+``` bash
 streamlit run streamlit_app.py
 ```
 
 Then:
 
-1. Select URLs, files, or both.
-2. Choose a chunking strategy.
-3. Configure chunk size and overlap.
-4. Click **Build RAG Database**.
-5. Enter a question.
-6. Inspect the generated answer, retrieved sources, citations, latency, and estimated cost.
+1.  Choose Web URLs, File Uploads, or Both.
+2.  Select a chunking strategy.
+3.  Configure chunk size and overlap.
+4.  Select Similarity Search or MMR.
+5.  Click **Build RAG Database**.
+6.  Ask a question.
+7.  Inspect the answer, retrieved sources, citations, latency, and
+    estimated cost.
 
----
+## LangGraph Studio
 
-# 🧪 LangGraph Studio
-
-To inspect the graph independently:
-
-```bash
+``` bash
 langgraph dev
 ```
 
-The graph is registered through:
+## Tests
 
-```text
-langgraph.json
+If `pytest` is available in the environment:
+
+``` bash
+pytest
 ```
 
-and exposed through:
+The repository currently focuses on component-level tests. Broader
+integration testing and automated RAG evaluation are planned.
 
-```text
-src/studio_graph.py
-```
+------------------------------------------------------------------------
 
----
+# Current Configuration
 
-# 🔄 End-to-End Query Flow
+  Parameter                  Current Value
+  -------------------------- -------------------------------
+  Python                     `>=3.13`
+  Application LLM            `gpt-oss-120b-groq`
+  Embedding Model            `gemini-embedding-2`
+  Dense Search               Similarity / MMR
+  Reranker                   `rerank-english-v3.0`
+  Chunk Size                 `500`
+  Chunk Overlap              `50`
+  Retrieval K                `4`
+  Reranker Top N             `5`
+  Dense/BM25 Weights         `0.7 / 0.3`
+  Max Query Rewrites         `3`
+  Max Generations            `3`
+  Temperature                `0.2`
+  Top P                      `0.9`
+  Max Tokens                 `7000`
+  Application Max Retries    `3`
+  LiteLLM Gateway Retries    `2`
+  Semantic Cache Threshold   `0.85`
+  Semantic Cache TTL         `1800 seconds` / `30 minutes`
+  Cache Embedding            Cohere Embed English v3
 
-```text
-User Query
-    │
-    ▼
-Input Security Guardrail
-    │
-    ├── Blocked ───────────────► END
-    │
-    ▼
-Query Analyzer
-    │
-    ├── External Search ───────► MCP Search
-    │
-    ▼
-Vector Search
-    │
-    ▼
-Hybrid Retrieval
-    │
-    ├── AstraDB Vector Search
-    └── BM25
-    │
-    ▼
-Ensemble Retrieval
-    │
-    ▼
-Cohere Reranking
-    │
-    ▼
-Document Grader
-    │
-    ├── Insufficient
-    │       │
-    │       ▼
-    │   Query Rewriter
-    │       │
-    │       └──────────────► Vector Search
-    │
-    ▼
-Answer Generator
-    │
-    ▼
-Redis Semantic Cache
-    │
-    ▼
-Hallucination Detector
-    │
-    ├── Ungrounded ─────────► Regenerate
-    │
-    ▼
-Answer Relevance Grader
-    │
-    ├── Irrelevant ────────► Query Rewriter
-    │
-    ▼
-Output Security Guardrail
-    │
-    ▼
-Final Answer
-```
+------------------------------------------------------------------------
 
-If local retrieval repeatedly fails, the workflow escalates to MCP-based external search.
+# Testing Status
 
----
+### Implemented
 
-# 🛡️ Safety Architecture
+-   [x] Adaptive node tests
+-   [x] Chunker tests
+-   [x] Document processor tests
+-   [x] Graph builder tests
+-   [x] Vector store tests
 
-The system applies defense-in-depth rather than relying on a single LLM safety prompt.
+### Planned
 
-```text
-User Input
-    │
-    ▼
-PII Middleware
-    │
-    ▼
-Deterministic Content Filter
-    │
-    ▼
-Input Security Agent
-    │
-    ▼
-RAG / MCP Workflow
-    │
-    ▼
-Tool Call Filtering
-    │
-    ▼
-Tool Result Filtering
-    │
-    ▼
-Output Security Agent
-    │
-    ▼
-Deterministic Output Middleware
-    │
-    ▼
-Final Response
-```
+-   [ ] Integration test suite
+-   [ ] CI execution
+-   [ ] Automated RAG evaluation
+-   [ ] RAGAS evaluation
+-   [ ] Retrieval benchmarks
+-   [ ] End-to-end regression dataset
 
-This protects both the normal RAG path and the external tool path.
+------------------------------------------------------------------------
 
----
+# Roadmap
 
-# 📌 Current Configuration
+## Evaluation
 
-| Parameter | Current Value |
-|---|---|
-| Python | `>=3.13` |
-| Embedding Model | `BAAI/bge-base-en-v1.5` |
-| Default LLM | `gpt-oss-120b-groq` |
-| Reranker | `rerank-english-v3.0` |
-| Chunk Size | `500` |
-| Chunk Overlap | `50` |
-| Retrieval K | `4` |
-| Reranker Top N | `5` |
-| Dense/BM25 Weights | `0.7 / 0.3` |
-| Max Query Rewrites | `3` |
-| Max Generations | `3` |
-| Temperature | `0.2` |
-| Max Tokens | `7000` |
-| Cache Type | Redis Semantic |
-| Cache Similarity Threshold | `0.85` |
-| Cache TTL | `1800 seconds` / `30 minutes` |
+-   [ ] Build a representative RAG evaluation dataset
+-   [ ] Add RAGAS evaluation
+-   [ ] Measure retrieval quality
+-   [ ] Measure answer faithfulness
+-   [ ] Measure answer relevance
+-   [ ] Compare Similarity vs MMR
+-   [ ] Compare dense vs hybrid retrieval
+-   [ ] Measure reranking improvements
+-   [ ] Benchmark latency and cost
+-   [ ] Perform retrieval ablation studies
 
----
+## Engineering
 
-# 🚧 Roadmap
+-   [x] Component-level unit tests
+-   [ ] Expand integration tests
+-   [ ] Add GitHub Actions CI
+-   [ ] Add Docker deployment
+-   [ ] Add FastAPI API layer
+-   [ ] Add production deployment configuration
 
-The core adaptive RAG, retrieval, guardrails, MCP integration, gateway routing, cost tracking, and semantic caching functionality is implemented.
+## Optimization
 
-### Evaluation
+-   [x] LiteLLM gateway
+-   [x] Model routing
+-   [x] Provider fallback
+-   [x] Redis semantic caching
+-   [x] Per-query cost tracking
+-   [ ] Cache hit-rate benchmarking
+-   [ ] Retrieval latency benchmarking
+-   [ ] Quality/cost trade-off analysis
 
-- [ ] Build automated RAG evaluation dataset
-- [ ] Add RAGAS evaluation pipeline
-- [ ] Measure retrieval and generation quality
-- [ ] Add baseline vs hybrid vs reranked vs adaptive comparisons
-- [ ] Add latency and cost benchmarking
+------------------------------------------------------------------------
 
-### Engineering
+# Engineering Decisions
 
-- [ ] Add automated test suite
-- [ ] Add graph routing tests
-- [ ] Add GitHub Actions CI pipeline
-- [ ] Add Docker deployment
-- [ ] Add FastAPI API layer
+This project is also intended as a practical laboratory for
+understanding why different RAG components are useful.
 
-### Optimization
+### Why BM25?
 
-- [x] Redis semantic caching
-- [ ] Cache hit-rate monitoring
-- [ ] Retrieval latency optimization
-- [ ] Cost/latency benchmarking
+BM25 provides a lexical retrieval signal that complements semantic
+retrieval, particularly for queries where exact terms and lexical
+overlap are important.
 
----
+### Why hybrid retrieval?
 
-# 🎯 Project Goals
+Dense and lexical retrieval have different strengths and failure modes.
+Combining them provides complementary candidate signals before
+reranking.
 
-This project focuses on demonstrating practical GenAI engineering concepts rather than only building a basic chatbot.
+### Why MMR?
 
-The main engineering goals are:
+Similarity search can return highly redundant chunks. MMR adds a
+relevance-versus-diversity trade-off to the dense retrieval stage.
 
-- Build an adaptive RAG workflow.
-- Improve retrieval using hybrid search and reranking.
-- Make retrieval self-correcting.
-- Reduce hallucinations through verification.
-- Escalate intelligently when local knowledge is insufficient.
-- Integrate external knowledge through MCP.
-- Protect user input, tool calls, tool results, and generated output.
-- Decouple application code from LLM providers through LiteLLM.
-- Track LLM usage cost.
-- Reduce repeated LLM calls through semantic caching.
-- Make the workflow inspectable through LangGraph Studio.
+### Why reranking?
 
----
+Initial retrieval is optimized for efficiently producing candidates. A
+reranker can perform a more focused query-document relevance assessment
+over those candidates.
 
-# 📚 Technologies
+### Why query rewriting?
 
-```text
-Python
-LangChain
-LangGraph
-LangChain Agents
-AstraDB
-BM25
-Cohere
-Sentence Transformers
-LiteLLM
-Redis
-MCP
-Tavily
-Wikipedia
-arXiv
-LangSmith
-Streamlit
-Pydantic
-uv
-```
+Weak queries can lead to weak retrieval. Rewriting provides another
+attempt to express the user's information need before escalating to
+external search.
 
----
+### Why hallucination detection?
 
-# 👨‍💻 Project Status
+Relevant documents do not guarantee that the generated answer is fully
+supported by those documents. A separate grounding check adds another
+reliability layer.
 
-**Core system: Functional**
+### Why external search?
 
-The current implementation includes the adaptive LangGraph workflow, hybrid retrieval, Cohere reranking, multi-format ingestion, idempotent indexing, query rewriting, hallucination detection, answer relevance grading, MCP external search, safety guardrails, PII protection, LiteLLM routing, Redis semantic caching, cost tracking, Streamlit UI, and LangGraph Studio integration.
+A local document collection cannot answer questions about information it
+does not contain. MCP-based search provides an escalation path.
 
-The remaining work is primarily focused on **evaluation, testing, CI/CD, containerization, and API deployment** rather than adding more core RAG functionality.
+### Why semantic caching?
+
+Semantically similar requests can otherwise trigger repeated LLM calls.
+Caching can reduce redundant inference, latency, and cost.
+
+### Why LiteLLM?
+
+A gateway separates application logic from individual model providers
+and centralizes routing, fallback, retry, caching, and cost handling.
+
+------------------------------------------------------------------------
+
+# Project Status
+
+## Core system: Functional
+
+The current implementation includes:
+
+-   adaptive LangGraph orchestration
+-   multi-format ingestion
+-   recursive, semantic, and hybrid chunking
+-   Google Gemini embeddings
+-   AstraDB retrieval
+-   Similarity Search
+-   MMR Search
+-   BM25
+-   hybrid ensemble retrieval
+-   Cohere reranking
+-   query rewriting
+-   retrieval grading
+-   hallucination detection
+-   answer relevance grading
+-   MCP external search
+-   Tavily / Wikipedia / arXiv
+-   input/output guardrails
+-   PII protection
+-   tool-call/result filtering
+-   bounded retries
+-   LiteLLM gateway
+-   model routing and fallback
+-   Redis semantic caching
+-   LLM cost tracking
+-   latency reporting
+-   LangGraph Studio
+-   Streamlit UI
+-   component-level tests
+
+The next phase is focused on **measurement and production hardening**:
+automated evaluation, retrieval ablation studies, integration testing,
+CI/CD, containerization, and API deployment.
+
+------------------------------------------------------------------------
+
+# License
+
+This project is part of the `generative-ai-projects` repository and is licensed under the **MIT License**.
+
+See the repository-level [LICENSE](../../LICENSE) file for the complete license text.
