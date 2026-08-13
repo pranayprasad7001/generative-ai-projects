@@ -37,7 +37,7 @@ litellm_settings:
   cache: True
   cache_params:
     type: redis-semantic
-    mode: default_off 
+    mode: default_off
     host: os.environ/REDIS_HOST
     port: os.environ/REDIS_PORT
     password: os.environ/REDIS_PASSWORD
