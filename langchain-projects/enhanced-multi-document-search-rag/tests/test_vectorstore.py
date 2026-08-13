@@ -12,9 +12,9 @@ class TestVectorStoreManager(unittest.TestCase):
     
     @patch("vectorstore.vectorstore.CohereRerank")
     @patch("vectorstore.vectorstore.AstraDBVectorStore")
-    @patch("vectorstore.vectorstore.HuggingFaceEmbeddings")
-    def setUp(self, mock_huggingface, mock_astradb, mock_cohere):
-        self.mock_huggingface = mock_huggingface
+    @patch("vectorstore.vectorstore.GoogleGenerativeAIEmbeddings")
+    def setUp(self, mock_google_embeddings, mock_astradb, mock_cohere):
+        self.mock_google_embeddings = mock_google_embeddings
         self.mock_astradb = mock_astradb
         self.mock_cohere = mock_cohere
         

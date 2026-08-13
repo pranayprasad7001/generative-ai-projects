@@ -59,6 +59,7 @@ class Config:
     GROQ_API_KEY = os.getenv("GROQ_API_KEY")
     COHERE_API_KEY = os.getenv("COHERE_API_KEY")
     TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
+    GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
     ASTRA_DB_API_KEY = os.getenv("ASTRA_DB_API_KEY")
     ASTRA_DB_API_ENDPOINT = os.getenv("ASTRA_DB_API_ENDPOINT") or os.getenv("ASTRA_DB_ENDPOINT")
@@ -77,7 +78,7 @@ class Config:
 
     # Logical model name defined in litellm_config.yaml
     LLM_MODEL = "gpt-oss-120b-groq"
-    EMBEDDING_MODEL = "BAAI/bge-base-en-v1.5"  
+    EMBEDDING_MODEL = "gemini-embedding-2" #"BAAI/bge-base-en-v1.5"  
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 
     # Document Processing

@@ -8,7 +8,6 @@ bs4
 requests
 streamlit
 wikipedia
-langchain-huggingface
 unstructured
 langchain_experimental
 langchain_astradb
@@ -28,3 +27,4 @@ langchain-openai
 torchvision
 redisvl
 redis
+langchain_google_genai

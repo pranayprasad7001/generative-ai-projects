@@ -6,18 +6,18 @@ from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_classic.schema import Document
-from langchain_huggingface import HuggingFaceEmbeddings
 
 logger = logging.getLogger(__name__)
 
 class VectorStoreManager:
-    """Manages FAISS vector stores with HuggingFace embeddings"""
+    """Manages AstraDB vector stores with Google Generative AI embeddings"""
     
     def __init__(self, embedding_model: str = Config.EMBEDDING_MODEL):
         logger.info("Initializing VectorStoreManager with embedding model: %s", embedding_model)
         self.embedding_model = embedding_model
-        self.embeddings = HuggingFaceEmbeddings(model_name=self.embedding_model)
+        self.embeddings = GoogleGenerativeAIEmbeddings(model=self.embedding_model, google_api_key=Config.GOOGLE_API_KEY)
         self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name=Config.ASTRA_DB_COLLECTION_NAME, token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
         self.bm25_retriever = None
         self.ensemble_retriever = None

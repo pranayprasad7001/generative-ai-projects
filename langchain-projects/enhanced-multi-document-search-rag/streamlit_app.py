@@ -139,6 +139,53 @@ st.markdown("""
         border-bottom: 2px solid #6366f1;
         padding-bottom: 0.5rem;
     }
+    
+    /* Features Grid */
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 1.25rem;
+        margin-top: 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .feature-card {
+        background-color: rgba(30, 41, 59, 0.4);
+        border: 1px solid #334155;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        transition: all 0.3s ease;
+    }
+    .feature-card:hover {
+        transform: translateY(-2px);
+        border-color: #6366f1;
+        background-color: rgba(30, 41, 59, 0.6);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+    }
+    .feature-card h4 {
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .feature-card ul {
+        margin: 0;
+        padding-left: 1.2rem;
+        color: #cbd5e1;
+        font-size: 0.9rem;
+    }
+    .feature-card strong {
+        color: #f1f5f9;
+    }
+    .feature-card li {
+        margin-bottom: 0.5rem;
+        line-height: 1.4;
+    }
+    .feature-card li:last-child {
+        margin-bottom: 0;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -327,16 +374,46 @@ def main():
         
         # Beautiful feature list
         st.markdown("""
-        ### Features of this Premium RAG Engine:
-        * \U0001f4c4 **Multi-Source Ingestion**: Load Web URLs, PDFs, DOCX, CSV, Excel, TXT, and Markdown files.
-        * \U0001f9e0 **Dynamic Chunking**: Choose Recursive Character splitting or Semantic/Hybrid chunking via embeddings.
-        * \U0001f50d **Hybrid Retrieval & Reranking**: Combined Astra DB vector search + BM25 keywords, optimized by Cohere Reranking.
-        * \u21c4 **Flexible Search Type**: Toggle between Vector Similarity and Maximal Marginal Relevance (MMR) search dynamically.
-        * \U0001f916 **Adaptive LangGraph Workflow**: Autonomous query routing, document relevance grading, and hallucination checking.
-        * \U0001f6e1\ufe0f **Security Guardrails & PII**: Banned keyword blocking and automated PII masking (emails, credit cards, phones).
-        * \U0001f50e **External Search Fallback**: Seamless fallback to Tavily & Wikipedia MCP tools if local documents are insufficient.
-        * \U0001f4b0 **Precision Cost Tracking**: Custom callback handlers compute precise transaction costs for each search.
-        """)
+        <h3 style="margin-top: 1.5rem; color: #f1f5f9;">Architecture & Features of this Premium RAG Engine</h3>
+        <div class="features-grid">
+            <div class="feature-card">
+                <h4 style="color: #818cf8;">\U0001f4c4 Ingestion & Search</h4>
+                <ul>
+                    <li><strong>Multi-Source:</strong> Loads Web URLs, PDFs, Word, Excel, CSV, TXT, and Markdown.</li>
+                    <li><strong>Ensemble Search:</strong> Blends Astra DB vector similarity with BM25 keyword matching.</li>
+                    <li><strong>Cohere Reranking:</strong> Refines context relevance using advanced cross-attention models.</li>
+                    <li><strong>Smart Chunking:</strong> Supports standard Recursive Character or embedding-based Semantic/Hybrid chunking.</li>
+                </ul>
+            </div>
+            <div class="feature-card">
+                <h4 style="color: #c084fc;">\U0001f916 Agentic Self-Correction</h4>
+                <ul>
+                    <li><strong>LangGraph Workflow:</strong> Replaces rigid pipelines with a flexible StateGraph orchestrator.</li>
+                    <li><strong>Double-Loop Correction:</strong> Grades context, rewrites weak queries, and catches hallucinations.</li>
+                    <li><strong>Runaway Protection:</strong> Enforces bounded retry loops (max 3) to prevent runaway LLM calls.</li>
+                    <li><strong>MCP Escalation:</strong> Seamlessly queries Tavily or Wikipedia MCP servers as search backup.</li>
+                </ul>
+            </div>
+            <div class="feature-card">
+                <h4 style="color: #fb7185;">\U0001f6e1\ufe0f Safety & Guardrails</h4>
+                <ul>
+                    <li><strong>PII Masking:</strong> Automatic masking/redaction of emails, credit cards, phones, and SSNs.</li>
+                    <li><strong>Bi-Directional Filtering:</strong> Audits incoming user queries and filters generated LLM responses.</li>
+                    <li><strong>Security Graders:</strong> Integrates custom keyword filters and LLM-based policy classification.</li>
+                    <li><strong>MCP Tool Sandbox:</strong> Intercepts and validates MCP tool arguments before calling APIs.</li>
+                </ul>
+            </div>
+            <div class="feature-card">
+                <h4 style="color: #34d399;">\U0001f4b0 Performance & Scale</h4>
+                <ul>
+                    <li><strong>Ingestion Idempotency:</strong> Prevents duplicate vector insertion using SHA-256 chunk hashing.</li>
+                    <li><strong>Unified Gateway:</strong> Routes requests through a self-hosted LiteLLM gateway with auto-failover.</li>
+                    <li><strong>Dynamic Search Modes:</strong> Switches on-the-fly between Vector Similarity and MMR modes.</li>
+                    <li><strong>Cost Analytics:</strong> Tracks tokens consumed and real-time execution costs per query.</li>
+                </ul>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
     else:
         # Search Box UI
         st.success(f"\U0001f7e2 Database Active: {st.session_state.num_chunks} chunks indexed (using {strategy_name} strategy).")
