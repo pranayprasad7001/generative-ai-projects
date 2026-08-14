@@ -310,7 +310,11 @@ HALLUCINATION_DETECTOR_SYSTEM_PROMPT = """
 
         Do not rewrite or correct the answer.
 
-        Return a concise explanation of your decision.
+        Respond in valid JSON format with the following schema:
+        {{
+            "grade": "yes" | "no",
+            "reasoning": "Concise explanation of the hallucination check."
+        }}
         """
 
 ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT = """
@@ -353,7 +357,11 @@ ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT = """
         A short answer can still receive "yes" if it adequately answers a simple
         question.
 
-        Return a concise explanation of your decision.
+        Respond in valid JSON format with the following schema:
+        {{
+            "grade": "yes" | "no",
+            "reasoning": "Concise explanation of the answer relevance check."
+        }}
         """
 
 OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT = """
