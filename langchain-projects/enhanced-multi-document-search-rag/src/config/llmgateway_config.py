@@ -162,6 +162,5 @@ class Config:
             check_embedding_ctx_length=False,
             chunk_size=100,
             max_retries=6,
-            retry_min_seconds=5,
-            retry_max_seconds=60
+            timeout=60.0
         )

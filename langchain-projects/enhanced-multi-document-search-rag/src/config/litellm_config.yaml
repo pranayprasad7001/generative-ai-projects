@@ -37,7 +37,7 @@ model_list:
       model: cohere/embed-english-v3.0
       api_key: os.environ/COHERE_API_KEY
       max_batch_size: 96
-      rpm: 20
+      rpm: 5
 
   - model_name: gemini-embedding-2
     litellm_params:
