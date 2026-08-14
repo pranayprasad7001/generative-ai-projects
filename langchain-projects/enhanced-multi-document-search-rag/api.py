@@ -135,7 +135,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         astra_db_connected=vector_store_manager is not None,
-        model_configured=Config.LLM_MODEL,
+        model_configured=getattr(Config, "LLM_MODEL_GENERATOR", getattr(Config, "LLM_MODEL", "nemotron-3-ultra-550b-a55b")),
         timestamp=time.time()
     )
 
@@ -159,7 +159,7 @@ async def query_rag(request: QueryRequest):
         )
 
         # Run query through compiled graph
-        result = await rag_system.run(request.question)
+        result = await rag_system.run(request.question, thread_id=request.thread_id)
         latency = time.time() - start_time
 
         # Format retrieved docs

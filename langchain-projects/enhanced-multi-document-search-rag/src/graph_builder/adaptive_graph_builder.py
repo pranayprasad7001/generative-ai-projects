@@ -1,4 +1,6 @@
+import uuid
 import logging
+from typing import Optional
 from langgraph.graph import StateGraph, START, END
 from state.adaptive_state import AdaptiveRAGState
 from nodes.adaptive_node import AdaptiveRAGNodes
@@ -121,12 +123,13 @@ class GraphBuilder:
         logger.info("StateGraph workflow successfully compiled.")
         return self.graph
 
-    async def run(self, question: str) -> dict:
+    async def run(self, question: str, thread_id: Optional[str] = None) -> dict:
         """
         Run the Adaptive RAG workflow with a question
 
         Args:
             question: Question to ask
+            thread_id: Optional thread identifier (generates a unique UUID4 if omitted)
 
         Returns:
             Dictionary with answer and other details
@@ -137,9 +140,12 @@ class GraphBuilder:
             )
             self.build_graph()
 
+        resolved_thread_id = thread_id or str(uuid.uuid4())
+
         logger.info(
-            "Running Adaptive RAG workflow for query: %s",
+            "Running Adaptive RAG workflow for query: %s (thread_id: %s)",
             repr(question),
+            resolved_thread_id
         )
 
         initial_state = AdaptiveRAGState(question=question)
@@ -150,7 +156,7 @@ class GraphBuilder:
                 initial_state,
                 config={
                     "configurable": {
-                        "thread_id": "default_thread"
+                        "thread_id": resolved_thread_id
                     },
                     "callbacks": [cost_callback]
                 },
