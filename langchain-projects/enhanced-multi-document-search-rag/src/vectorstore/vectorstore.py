@@ -6,47 +6,22 @@ from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_classic.schema import Document
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 logger = logging.getLogger(__name__)
 
 class VectorStoreManager:
-    """Manages AstraDB vector stores with Google Generative AI embeddings"""
+    """Manages AstraDB vector stores with LiteLLM Gateway embeddings"""
     
-    def __init__(self, embedding_model: str = Config.EMBEDDING_MODEL):
-        logger.info("Initializing VectorStoreManager with embedding model: %s", embedding_model)
-        self.embedding_model = embedding_model
-        self.embeddings = GoogleGenerativeAIEmbeddings(model=self.embedding_model, google_api_key=Config.GOOGLE_API_KEY)
-        
-        # Wrap embedding methods with tenacity retry to handle rate limiting (429 Resource Exhausted)
-        original_embed_documents = self.embeddings.embed_documents
-        original_embed_query = self.embeddings.embed_query
-        
-        def is_rate_limit_error(exception: Exception) -> bool:
-            err_str = str(exception).upper()
-            if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "RATE_LIMIT" in err_str or "QUOTA" in err_str:
-                logger.warning("Rate limit error detected in embeddings call: %s. Retrying...", exception)
-                return True
-            for attr in ("code", "status_code", "status"):
-                if hasattr(exception, attr):
-                    val = str(getattr(exception, attr))
-                    if "429" in val or "RESOURCE_EXHAUSTED" in val:
-                        logger.warning("Rate limit error attribute %s=%s detected. Retrying...", attr, val)
-                        return True
-            return False
-
-        retry_decorator = retry(
-            reraise=True,
-            stop=stop_after_attempt(6),
-            wait=wait_exponential(multiplier=2, min=4, max=60),
-            retry=retry_if_exception(is_rate_limit_error)
+    def __init__(self):
+        logger.info("Initializing VectorStoreManager with LiteLLM Gateway embeddings.")
+        self.embeddings = Config.get_embeddings()
+        self.vectorstore = AstraDBVectorStore(
+            embedding=self.embeddings,
+            collection_name=Config.ASTRA_DB_COLLECTION_NAME,
+            token=Config.ASTRA_DB_API_KEY,
+            api_endpoint=Config.ASTRA_DB_API_ENDPOINT
         )
-
-        self.embeddings.embed_documents = retry_decorator(original_embed_documents)
-        self.embeddings.embed_query = retry_decorator(original_embed_query)
-        self.vectorstore = AstraDBVectorStore(embedding=self.embeddings, collection_name=Config.ASTRA_DB_COLLECTION_NAME, token=Config.ASTRA_DB_API_KEY, api_endpoint=Config.ASTRA_DB_API_ENDPOINT)
         self.bm25_retriever = None
         self.ensemble_retriever = None
         self.compression_retriever = None
@@ -54,7 +29,10 @@ class VectorStoreManager:
         self.documents = []
         self._current_k = None
         self._current_search_type = None
-        self.cohere_reranker = CohereRerank(model=Config.COHERE_RERANKER_MODEL, top_n=Config.COHERE_RERANKER_TOP_N)
+        self.cohere_reranker = CohereRerank(
+            model=Config.COHERE_RERANKER_MODEL,
+            top_n=Config.COHERE_RERANKER_TOP_N
+        )
 
     def _add_documents_to_vectorstore(self, split_docs: List[Document], vector_store: AstraDBVectorStore) -> AstraDBVectorStore:
         """
