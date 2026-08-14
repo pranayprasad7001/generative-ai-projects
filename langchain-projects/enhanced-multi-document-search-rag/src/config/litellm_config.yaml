@@ -53,10 +53,7 @@ router_settings:
   fallbacks:
     - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2"]
     - gpt-oss-120b-groq: ["gpt-oss-20b-groq"]
-    - embed-english-v3.0: ["gemini-embedding-2"]
-  
-  context_window_fallbacks:
-    - embed-english-v3.0: ["gemini-embedding-2"]
+
   enable_pre_call_checks: true
   optional_pre_call_checks:
     - enforce_model_rate_limits
@@ -75,4 +72,4 @@ litellm_settings:
     password: os.environ/REDIS_PASSWORD
     similarity_threshold: 0.85
     ttl: 1800
-    redis_semantic_cache_embedding_model: embed-english-v3.0
+    redis_semantic_cache_embedding_model: gemini-embedding-2
