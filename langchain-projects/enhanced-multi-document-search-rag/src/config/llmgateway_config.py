@@ -1,6 +1,7 @@
 """Configuration module for Agentic RAG system"""
 
 import os
+import litellm
 import logging
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
@@ -9,42 +10,50 @@ from langchain_core.rate_limiters import InMemoryRateLimiter
 # Load environment variables
 load_dotenv()
 
-import litellm
-
 # Register custom model pricing for LiteLLM cost calculation fallback
 try:
     litellm.register_model({
+        "nemotron-3-ultra-550b-a55b": {
+            "max_tokens": 16384,
+            "input_cost_per_token": 0.0,
+            "output_cost_per_token": 0.0,
+            "cache_creation_input_token_cost": 0.0,
+            "cache_read_input_token_cost": 0.0,
+            "litellm_provider": "openai",
+            "mode": "chat"
+        },
+
         "nvidia-glm-5.2": {
-            "max_tokens": 12000,
-            "input_cost_per_token": 0.0000014,
-            "output_cost_per_token": 0.0000042,
+            "max_tokens": 16384,
+            "input_cost_per_token": 0.0,
+            "output_cost_per_token": 0.0,
+            "cache_creation_input_token_cost": 0.0,
+            "cache_read_input_token_cost": 0.0,
             "litellm_provider": "openai",
             "mode": "chat"
         },
+
         "gpt-oss-120b-groq": {
-            "max_tokens": 8192,
+            "max_tokens": 65536,
             "input_cost_per_token": 0.00000015,
-            "output_cost_per_token": 0.00000075,
+            "output_cost_per_token": 0.00000060,
+            "cache_creation_input_token_cost": 0.00000015,
+            "cache_read_input_token_cost": 0.000000075,
             "litellm_provider": "openai",
             "mode": "chat"
         },
+
         "gpt-oss-20b-groq": {
-            "max_tokens": 8192,
+            "max_tokens": 65536,
             "input_cost_per_token": 0.000000075,
-            "output_cost_per_token": 0.0000003,
-            "litellm_provider": "openai",
-            "mode": "chat"
-        },
-        "qwen3.6-27b-groq": {
-            "max_tokens": 8192,
-            "input_cost_per_token": 0.000000289,
-            "output_cost_per_token": 0.0000024,
+            "output_cost_per_token": 0.00000030,
+            "cache_creation_input_token_cost": 0.000000075,
+            "cache_read_input_token_cost": 0.0000000375,
             "litellm_provider": "openai",
             "mode": "chat"
         }
     })
 except Exception as e:
-    
     logging.getLogger(__name__).warning("Failed to register custom models in LiteLLM: %s", e)
 
 class Config:
@@ -77,8 +86,8 @@ class Config:
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
     # Logical model name defined in litellm_config.yaml
-    LLM_MODEL = "gpt-oss-120b-groq"
-    EMBEDDING_MODEL = "gemini-embedding-2" #"BAAI/bge-base-en-v1.5"  
+    LLM_MODEL = "nemotron-3-ultra-550b-a55b"
+    EMBEDDING_MODEL = "gemini-embedding-2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 
     # Document Processing
@@ -91,8 +100,8 @@ class Config:
     # Generation parameters
     LLM_TEMPERATURE = 0.2
     LLM_TOP_P = 0.9
-    LLM_MAX_TOKENS = 7000
-    LLM_RATE_LIMITER = 7000
+    LLM_MAX_TOKENS = 6000
+    LLM_RATE_LIMITER = 0.5
     MAX_RETRIES = 3
 
     # Default URLs
@@ -106,7 +115,7 @@ class Config:
         """Initialize LLM through LiteLLM Gateway."""
         rate_limiter = InMemoryRateLimiter(
             requests_per_second=cls.LLM_RATE_LIMITER,
-            max_bucket_size=100
+            max_bucket_size=1
         )
         return ChatOpenAI(
             model=cls.LLM_MODEL,

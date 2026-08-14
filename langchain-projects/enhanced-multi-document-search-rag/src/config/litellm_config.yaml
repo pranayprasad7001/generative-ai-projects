@@ -4,33 +4,46 @@ model_list:
     litellm_params:
       model: groq/openai/gpt-oss-120b
       api_key: os.environ/GROQ_API_KEY
+      max_tokens: 65536
+      rpm: 30
+      tpm: 8000
 
   - model_name: gpt-oss-20b-groq
     litellm_params:
       model: groq/openai/gpt-oss-20b
       api_key: os.environ/GROQ_API_KEY
+      max_tokens: 65536
+      rpm: 30
+      tpm: 8000
 
-  - model_name: qwen3.6-27b-groq
+  - model_name: nemotron-3-ultra-550b-a55b
     litellm_params:
-      model: groq/qwen/qwen3.6-27b
-      api_key: os.environ/GROQ_API_KEY
+      model: nvidia_nim/nemotron-3-ultra-550b-a55b
+      api_key: os.environ/NVIDIA_API_KEY
+      api_base: os.environ/NVIDIA_API_BASE
+      max_tokens: 16384
+      rpm: 40
 
   - model_name: nvidia-glm-5.2
     litellm_params:
       model: nvidia_nim/z-ai/glm-5.2
       api_key: os.environ/NVIDIA_API_KEY
       api_base: os.environ/NVIDIA_API_BASE
+      max_tokens: 16384
+      rpm: 40
 
-  - model_name: cohere-embed
+  - model_name: embed-english-v3.0
     litellm_params:
       model: cohere/embed-english-v3.0
       api_key: os.environ/COHERE_API_KEY
+      rpm: 30
+      tpm: 8000
 
 router_settings:
   num_retries: 2
-  timeout: 30
+  timeout: 25
   fallbacks:
-    - nvidia-glm-5.2: ["gpt-oss-120b-groq", "gpt-oss-20b-groq"]
+    - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2", "gpt-oss-120b-groq", "gpt-oss-20b-groq"]
 
 litellm_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
@@ -43,4 +56,4 @@ litellm_settings:
     password: os.environ/REDIS_PASSWORD
     similarity_threshold: 0.85
     ttl: 1800
-    redis_semantic_cache_embedding_model: cohere-embed
+    redis_semantic_cache_embedding_model: embed-english-v3.0
