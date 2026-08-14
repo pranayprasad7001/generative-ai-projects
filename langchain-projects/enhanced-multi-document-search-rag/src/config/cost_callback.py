@@ -48,7 +48,8 @@ class CostTrackingCallbackHandler(BaseCallbackHandler):
             # Check llm_output for token usage if not found in generations
             llm_output = response.llm_output or {}
             token_usage = llm_output.get("token_usage") or {}
-            model_name = llm_output.get("model_name") or Config.LLM_MODEL
+            default_model = getattr(Config, "LLM_MODEL_GENERATOR", getattr(Config, "LLM_MODEL", "nemotron-3-ultra-550b-a55b"))
+            model_name = llm_output.get("model_name") or llm_output.get("model") or default_model
             
             # If we have token usage at the root LLMResult level, try to use it
             if token_usage:
@@ -69,22 +70,22 @@ class CostTrackingCallbackHandler(BaseCallbackHandler):
             if fallback_cost == 0.0:
                 for generations in response.generations:
                     for gen in generations:
-                        model_name = Config.LLM_MODEL
+                        gen_model_name = default_model
                         token_usage = {}
                         
                         if hasattr(gen, "message") and gen.message:
                             metadata = getattr(gen.message, "response_metadata", None) or {}
                             token_usage = metadata.get("token_usage") or {}
-                            model_name = metadata.get("model_name") or model_name
+                            gen_model_name = metadata.get("model_name") or metadata.get("model") or gen_model_name
                         
                         if not token_usage and hasattr(gen, "generation_info") and gen.generation_info:
                             token_usage = gen.generation_info.get("token_usage") or {}
-                            model_name = gen.generation_info.get("model_name") or model_name
+                            gen_model_name = gen.generation_info.get("model_name") or gen.generation_info.get("model") or gen_model_name
                             
                         if token_usage:
                             try:
                                 completion_response = {
-                                    "model": model_name,
+                                    "model": gen_model_name,
                                     "usage": {
                                         "prompt_tokens": token_usage.get("prompt_tokens", 0),
                                         "completion_tokens": token_usage.get("completion_tokens", 0)
