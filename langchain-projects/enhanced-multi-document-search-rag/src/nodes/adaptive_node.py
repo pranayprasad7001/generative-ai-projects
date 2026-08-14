@@ -194,11 +194,14 @@ class AdaptiveRAGNodes:
             self.external_search_agent = await self.guardrails.get_combined_guardrail_agent()
             logger.info("Combined guardrail agent initialized successfully with MCP tools.")
 
-        response = await self.external_search_agent.ainvoke({
-            "messages": [
-                ("user", state.question)
-            ]
-        })
+        response = await self.external_search_agent.ainvoke(
+            {
+                "messages": [
+                    ("user", state.question)
+                ]
+            },
+            config={"recursion_limit": 8}
+        )
         
         messages = response.get("messages", [])
         answer = messages[-1].content if messages else response.get("output", "")

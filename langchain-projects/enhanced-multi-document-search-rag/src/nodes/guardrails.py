@@ -30,12 +30,14 @@ class ContentFilterMiddleware(AgentMiddleware):
     requests do not incur an LLM call.
     """
 
-    def __init__(self, banned_keywords: list[str]):
+    def __init__(self, banned_keywords: list[str], max_tool_calls: int = 3):
         super().__init__()
         self.banned_keywords = [
             keyword.lower()
             for keyword in banned_keywords
         ]
+        self.max_tool_calls = max_tool_calls
+        self.tool_calls_count = 0
 
     @hook_config(can_jump_to=["end"])
     def before_agent(
@@ -43,6 +45,8 @@ class ContentFilterMiddleware(AgentMiddleware):
         state: AgentState,
         runtime: Any,
     ) -> dict[str, Any] | None:
+        # Reset tool calls counter for each agent run
+        self.tool_calls_count = 0
 
         if not state["messages"]:
             return None
@@ -84,6 +88,16 @@ class ContentFilterMiddleware(AgentMiddleware):
         """Intercept and validate tool arguments and output in sync context."""
         tool_name = request.tool_call.get("name")
         args = request.tool_call.get("args", {})
+        
+        self.tool_calls_count += 1
+        if self.tool_calls_count > self.max_tool_calls:
+            logger.warning(
+                f"Maximum tool limit ({self.max_tool_calls}) reached. Forcing external search agent to finalize answer."
+            )
+            return ToolMessage(
+                content=f"Maximum tool limit ({self.max_tool_calls}) reached. Do not call any further tools. Synthesize your final response immediately.",
+                tool_call_id=request.tool_call["id"],
+            )
 
         for val in args.values():
             if isinstance(val, str):
@@ -112,7 +126,7 @@ class ContentFilterMiddleware(AgentMiddleware):
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
-                        f"Redacted banned content from tool '{tool_name}' output."
+                        f"Redacted banned content containing keyword '{keyword}' from tool '{tool_name}' output."
                     )
                     return ToolMessage(
                         content="[Banned or unsafe content redacted from search results]",
@@ -131,6 +145,16 @@ class ContentFilterMiddleware(AgentMiddleware):
         """Intercept and validate tool arguments and output in async context."""
         tool_name = request.tool_call.get("name")
         args = request.tool_call.get("args", {})
+        
+        self.tool_calls_count += 1
+        if self.tool_calls_count > self.max_tool_calls:
+            logger.warning(
+                f"Maximum tool limit ({self.max_tool_calls}) reached. Forcing external search agent to finalize answer."
+            )
+            return ToolMessage(
+                content=f"Maximum tool limit ({self.max_tool_calls}) reached. Do not call any further tools. Synthesize your final response immediately.",
+                tool_call_id=request.tool_call["id"],
+            )
 
         for val in args.values():
             if isinstance(val, str):
@@ -159,7 +183,7 @@ class ContentFilterMiddleware(AgentMiddleware):
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
-                        f"Redacted banned content from tool '{tool_name}' output."
+                        f"Redacted banned content containing keyword '{keyword}' from tool '{tool_name}' output."
                     )
                     return ToolMessage(
                         content="[Banned or unsafe content redacted from search results]",
