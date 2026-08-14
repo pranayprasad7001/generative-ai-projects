@@ -263,12 +263,14 @@ def process_ingestion(urls_input, uploaded_files, strategy_name, chunk_size, chu
             status.update(label=f"\U0001f4be Indexing {len(documents)} chunks into Astra DB...", state="running")
             vector_store.create_vectorstore(documents)
             
-            status.update(label="\u26a1 Initializing agentic retrieval graph...", state="running")
-            llm = Config.get_llm()
+            status.update(label="⚡ Initializing agentic retrieval graph...", state="running")
+            llm_generator = Config.get_llm_generator()
+            llm_checker = Config.get_llm_checker()
             search_type = "mmr" if search_type_choice == "Maximal Marginal Relevance (MMR)" else "similarity"
             graph_builder = GraphBuilder(
                 retriever=vector_store.get_retriever(search_type=search_type),
-                llm=llm
+                llm_generator=llm_generator,
+                llm_checker=llm_checker
             )
             graph_builder.build_graph()
             

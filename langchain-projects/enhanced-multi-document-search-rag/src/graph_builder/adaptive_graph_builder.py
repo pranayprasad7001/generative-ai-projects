@@ -10,16 +10,23 @@ logger = logging.getLogger(__name__)
 class GraphBuilder:
     """Builds and manages the langgraph workflow"""
 
-    def __init__(self, retriever, llm):
+    def __init__(self, retriever, llm_generator=None, llm_checker=None, llm=None):
         """
         Initialize the graph builder
 
         Args:
             retriever: Document retriever instance
-            llm: Language model instance
+            llm_generator: Language model instance for answer generation
+            llm_checker: Language model instance for checks/structured outputs
+            llm: Fallback language model instance (for backward compatibility)
         """
-        logger.info("Initializing GraphBuilder with retriever and LLM.")
-        self.nodes = AdaptiveRAGNodes(retriever, llm)
+        logger.info("Initializing GraphBuilder with retriever, LLM Generator, and LLM Checker.")
+        self.nodes = AdaptiveRAGNodes(
+            retriever=retriever,
+            llm_generator=llm_generator,
+            llm_checker=llm_checker,
+            llm=llm
+        )
         self.graph = None
         self.checkpointer = InMemorySaver()
 

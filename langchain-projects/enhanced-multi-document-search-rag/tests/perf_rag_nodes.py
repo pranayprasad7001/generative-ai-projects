@@ -23,14 +23,15 @@ class DummyRetriever:
     def invoke(self, q):
         return []
 
-print("Initializing LLM...")
+print("Initializing LLMs...")
 start = time.time()
-llm = Config.get_llm()
-print(f"LLM initialized in {time.time() - start:.4f} seconds")
+llm_generator = Config.get_llm_generator()
+llm_checker = Config.get_llm_checker()
+print(f"LLMs initialized in {time.time() - start:.4f} seconds")
 
 print("Initializing AdaptiveRAGNodes...")
 start = time.time()
-nodes = AdaptiveRAGNodes(DummyRetriever(), llm)
+nodes = AdaptiveRAGNodes(DummyRetriever(), llm_generator=llm_generator, llm_checker=llm_checker)
 print(f"AdaptiveRAGNodes initialized in {time.time() - start:.4f} seconds")
 
 state = AdaptiveRAGState(question="What is the core idea of LLM agents?")

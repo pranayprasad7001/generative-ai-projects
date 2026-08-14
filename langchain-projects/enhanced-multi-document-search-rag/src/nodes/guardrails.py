@@ -268,8 +268,11 @@ class Guardrails:
         "database password",
     ]
 
-    def __init__(self, llm):
-        self.llm = llm
+    def __init__(self, llm_checker, llm_generator=None):
+        self.llm_checker = llm_checker
+        self.llm_generator = llm_generator if llm_generator is not None else llm_checker
+        # Backward compatibility alias
+        self.llm = self.llm_checker
         self.input_guardrail_agent = None
         self.output_guardrail_agent = None
         self.combined_guardrail_agent = None
@@ -330,7 +333,7 @@ class Guardrails:
         """Build input guardrail agent"""
         logger.debug("Building input guardrail agent with PII and keyword filtering.")
         self.input_guardrail_agent = create_agent(
-            model=self.llm,
+            model=self.llm_checker,
             system_prompt=QUERY_SECURITY_SYSTEM_PROMPT,
             middleware=self._get_common_pii_middleware() + [
                 ContentFilterMiddleware(
@@ -343,7 +346,7 @@ class Guardrails:
         """Build output guardrail agent"""
         logger.debug("Building output guardrail agent with PII and pattern filtering.")
         self.output_guardrail_agent = create_agent(
-            model=self.llm,
+            model=self.llm_checker,
             system_prompt=OUTPUT_ANSWER_SECURITY_SYSTEM_PROMPT,
             middleware=self._get_common_pii_middleware() + [
                 SafetyGuardrailMiddleware(
@@ -356,7 +359,7 @@ class Guardrails:
         """Build combined guardrail agent"""
         logger.debug("Building combined guardrail agent with PII and keyword filtering.")
         tools = await self.mcp_manager.get_tools()
-        cached_llm = self.llm.bind(
+        cached_llm = self.llm_generator.bind(
             extra_body={"cache": {"use-cache": True, "ttl": 1800}}
         )
         self.combined_guardrail_agent = create_agent(

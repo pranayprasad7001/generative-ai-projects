@@ -52,9 +52,14 @@ async def lifespan(app: FastAPI):
         doc_processor = DocumentProcessor(embeddings=vector_store_manager.embeddings)
         
         # Initialize LLM and GraphBuilder
-        llm = Config.get_llm()
+        llm_generator = Config.get_llm_generator()
+        llm_checker = Config.get_llm_checker()
         retriever = vector_store_manager.get_retriever()
-        rag_system = GraphBuilder(retriever=retriever, llm=llm)
+        rag_system = GraphBuilder(
+            retriever=retriever,
+            llm_generator=llm_generator,
+            llm_checker=llm_checker
+        )
         rag_system.build_graph()
         logger.info("RAG Core Services initialized successfully.")
     except Exception as e:

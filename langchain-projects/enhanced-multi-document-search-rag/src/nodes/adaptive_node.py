@@ -24,18 +24,35 @@ logger = logging.getLogger(__name__)
 class AdaptiveRAGNodes:
     """Contains node functions for RAG workflow"""
 
-    def __init__(self, retriever, llm):
+    def __init__(self, retriever, llm_generator=None, llm_checker=None, llm=None):
         """
-        Initialize RAG nodes with retriever and llm
+        Initialize RAG nodes with retriever, llm_generator, and llm_checker.
 
         Args:
             retriever: Document retriever instance
-            llm: Language model instance
+            llm_generator: Language model instance for answer generation
+            llm_checker: Language model instance for structured checks/routing/grading
+            llm: Fallback language model instance (for backward compatibility)
         """
-        logger.info("Initializing RAGNodes with retriever and LLM.")
+        logger.info("Initializing RAGNodes with retriever, LLM Generator, and LLM Checker.")
         self.retriever = retriever
-        self.llm = llm
-        self.guardrails = Guardrails(self.llm)
+        
+        # Handle backward compatibility / flexible arguments
+        if llm_generator is None and llm is not None:
+            self.llm_generator = llm
+            self.llm_checker = llm_checker if llm_checker is not None else llm
+        elif llm_generator is not None and llm_checker is None:
+            # Single LLM passed as 2nd positional argument
+            self.llm_generator = llm_generator
+            self.llm_checker = llm_generator
+        else:
+            self.llm_generator = llm_generator
+            self.llm_checker = llm_checker
+
+        # Backward compatibility alias
+        self.llm = self.llm_generator
+
+        self.guardrails = Guardrails(llm_checker=self.llm_checker, llm_generator=self.llm_generator)
         self.input_guardrail_agent = self.guardrails.get_input_guardrail_agent()
         self.output_guardrail_agent = self.guardrails.get_output_guardrail_agent()
         self.external_search_agent = None
@@ -58,63 +75,72 @@ class AdaptiveRAGNodes:
         if not messages:
             logger.warning("Input security check failed to return messages. Blocking by default.")
             state.query_blocked = True
-            state.answer = (
-                "I was unable to validate your request. "
-                "Please try again."
-            )
+            state.answer = "This request could not be processed due to security filtering."
             return state
 
-        result = messages[-1].content.strip().upper()
+        last_message = messages[-1]
+        content = last_message.content if hasattr(last_message, "content") else str(last_message)
+        content_clean = content.strip().upper()
 
-        if "BLOCKED:" in result or result == "BLOCKED":
-            logger.warning("Input security check BLOCKED the query.")
+        if "BLOCKED" in content_clean:
+            logger.warning("Input query blocked by security guardrail.")
             state.query_blocked = True
-            state.answer = (
-                "I cannot process this request. "
-                "Please rephrase your question."
-            )
-        else:
-            logger.info("Input security check passed.")
+            state.answer = "I cannot process this request. Please rephrase your question."
+        elif "SAFE" in content_clean:
+            logger.info("Input query passed security check.")
             state.query_blocked = False
+        else:
+            # If model returned anything unexpected, check if it's explicitly denying
+            if any(term in content_clean for term in ["CANNOT", "SORRY", "NOT SAFE", "VIOLAT"]):
+                logger.warning("Input query denied by safety guardrail agent.")
+                state.query_blocked = True
+                state.answer = "I cannot process this request. Please rephrase your question."
+            else:
+                logger.info("Input query treated as SAFE by guardrail agent.")
+                state.query_blocked = False
 
         return state
 
     def input_query_security_router(self, state: AdaptiveRAGState) -> str:
-        """Route the workflow based on the input security check."""
-        logger.info("Routing from input security check. Query blocked: %s", state.query_blocked)
+        """Route based on input security check result."""
         if state.query_blocked:
+            logger.warning("Routing to END due to security violation.")
             return "end"
+        logger.info("Routing to query_analyzer after successful security check.")
         return "query_analyzer"
 
     async def output_answer_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
-        """
-        Review and safely rewrite the generated answer.
+        """Validate and sanitize the final generated answer."""
+        logger.info("Running output security check.")
+        logger.debug("Raw generated answer: %s", state.answer)
 
-        The output guardrail agent performs one LLM call.
-        The middleware performs deterministic post-processing only.
-        """
         if not state.answer:
-            logger.debug("Output security check skipped (empty answer).")
+            logger.warning("Empty answer provided to output security check.")
             return state
 
-        logger.info("Running output security check.")
         response = await self.output_guardrail_agent.ainvoke(
             {
                 "messages": [
-                    HumanMessage(content=state.answer)
+                    HumanMessage(content=f"Review the following answer for safety and policy compliance:\n\n{state.answer}")
                 ]
             }
         )
 
         messages = response.get("messages", [])
 
-        if messages:
-            final_message = messages[-1]
+        if not messages:
+            logger.warning("Output security check failed to return messages. Retaining raw answer.")
+            return state
 
-            if isinstance(final_message, AIMessage):
-                state.answer = final_message.content
+        last_message = messages[-1]
+        sanitized_answer = last_message.content if hasattr(last_message, "content") else str(last_message)
 
-        logger.info("Output security check completed.")
+        if sanitized_answer and sanitized_answer.strip():
+            state.answer = sanitized_answer.strip()
+            logger.info("Output answer validated/sanitized successfully.")
+        else:
+            logger.warning("Output security check returned empty content. Retaining raw answer.")
+
         return state
 
     def query_analyzer(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
@@ -137,7 +163,7 @@ class AdaptiveRAGNodes:
             ("human", "{question}")
         ])
 
-        response = self.llm.with_structured_output(ToolUse).invoke(
+        response = self.llm_checker.with_structured_output(ToolUse).invoke(
             prompt.format_messages(question=state.question)
         )
 
@@ -226,7 +252,7 @@ class AdaptiveRAGNodes:
             for i, doc in enumerate(state.retrieved_docs, start=1)
         )
 
-        response = self.llm.with_structured_output(
+        response = self.llm_checker.with_structured_output(
             RetrievalGrade
         ).invoke(
             prompt.format_messages(
@@ -261,7 +287,7 @@ class AdaptiveRAGNodes:
             """
         )])
 
-        response = self.llm.with_structured_output(QuestionRewrite).invoke(
+        response = self.llm_checker.with_structured_output(QuestionRewrite).invoke(
             prompt.format_messages(
                 original_question=state.original_question,
                 current_question=state.question,
@@ -299,7 +325,7 @@ class AdaptiveRAGNodes:
             ),
         ])
 
-        response = self.llm.bind(
+        response = self.llm_generator.bind(
             extra_body={"cache": {"use-cache": True, "ttl": 1800}}
         ).invoke(prompt.format_messages(question=state.question, documents=documents_content))
         state.answer = response.content
@@ -333,7 +359,7 @@ class AdaptiveRAGNodes:
         ),
         ])
         
-        response = self.llm.with_structured_output(HallucinationGrade).invoke(
+        response = self.llm_checker.with_structured_output(HallucinationGrade).invoke(
             prompt.format_messages(question=state.question, documents=documents_content, answer=state.answer))
 
         state.hallucination_grade = response.grade
@@ -360,7 +386,7 @@ class AdaptiveRAGNodes:
         ),
         ])
 
-        response = self.llm.with_structured_output(AnswerRelevanceGrade).invoke(
+        response = self.llm_checker.with_structured_output(AnswerRelevanceGrade).invoke(
             prompt.format_messages(question=state.question, answer=state.answer)
         )
 

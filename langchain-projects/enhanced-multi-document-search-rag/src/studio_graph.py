@@ -8,11 +8,16 @@ from config.llmgateway_config import Config
 from vectorstore.vectorstore import VectorStoreManager
 from graph_builder.adaptive_graph_builder import GraphBuilder
 
-# Initialize LLM and Vector Store
-llm = Config.get_llm()
+# Initialize LLMs and Vector Store
+llm_generator = Config.get_llm_generator()
+llm_checker = Config.get_llm_checker()
 vector_store = VectorStoreManager()
 retriever = vector_store.get_retriever()
 
 # Build and compile the graph without custom checkpointer (managed by platform)
-graph_builder = GraphBuilder(retriever=retriever, llm=llm)
+graph_builder = GraphBuilder(
+    retriever=retriever,
+    llm_generator=llm_generator,
+    llm_checker=llm_checker
+)
 graph = graph_builder.build_graph(use_checkpointer=False)

@@ -28,7 +28,6 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.builder.graph)
         
         # Verify compiled graph has the nodes we expect
-        # We can check graph.nodes dictionary keys
         expected_nodes = [
             "input_query_security_check",
             "query_analyzer",
@@ -43,6 +42,17 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         ]
         for node in expected_nodes:
             self.assertIn(node, self.builder.graph.nodes)
+
+    def test_build_graph_with_dual_models(self):
+        """Test building graph when distinct generator and checker LLMs are provided."""
+        from graph_builder.adaptive_graph_builder import GraphBuilder
+        mock_gen = MagicMock()
+        mock_chk = MagicMock()
+        builder = GraphBuilder(self.mock_retriever, llm_generator=mock_gen, llm_checker=mock_chk)
+        graph = builder.build_graph(use_checkpointer=False)
+        self.assertIsNotNone(graph)
+        self.assertEqual(builder.nodes.llm_generator, mock_gen)
+        self.assertEqual(builder.nodes.llm_checker, mock_chk)
 
     @patch("graph_builder.adaptive_graph_builder.CostTrackingCallbackHandler")
     async def test_run_success(self, mock_callback_class):

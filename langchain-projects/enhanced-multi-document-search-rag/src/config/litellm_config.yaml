@@ -51,7 +51,8 @@ router_settings:
   num_retries: 5
   timeout: 60
   fallbacks:
-    - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2", "gpt-oss-120b-groq", "gpt-oss-20b-groq"]
+    - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2"]
+    - gpt-oss-120b-groq: ["gpt-oss-20b-groq"]
   enable_pre_call_checks: true
   optional_pre_call_checks:
     - enforce_model_rate_limits

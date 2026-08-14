@@ -86,7 +86,8 @@ class Config:
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
     # Logical model name defined in litellm_config.yaml
-    LLM_MODEL = "nemotron-3-ultra-550b-a55b"
+    LLM_MODEL_CHECKER = "gpt-oss-120b-groq"
+    LLM_MODEL_GENERATOR = "nemotron-3-ultra-550b-a55b"
     EMBEDDING_MODEL = "gemini-embedding-2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 
@@ -101,7 +102,8 @@ class Config:
     # Generation parameters
     LLM_TEMPERATURE = 0.2
     LLM_TOP_P = 1.0
-    LLM_MAX_TOKENS = 7000
+    LLM_GENERATOR_MAX_TOKENS = 3000
+    LLM_CHECKER_MAX_TOKENS = 400
     LLM_RATE_LIMITER = 0.5
     MAX_RETRIES = 3
 
@@ -112,19 +114,38 @@ class Config:
     ]
     
     @classmethod
-    def get_llm(cls):
-        """Initialize LLM through LiteLLM Gateway."""
+    def get_llm_checker(cls):
+        """Initialize Checker/Evaluator LLM through LiteLLM Gateway."""
         rate_limiter = InMemoryRateLimiter(
             requests_per_second=cls.LLM_RATE_LIMITER,
             max_bucket_size=1
         )
         return ChatOpenAI(
-            model=cls.LLM_MODEL,
+            model=cls.LLM_MODEL_CHECKER,
             api_key=cls.LITELLM_API_KEY,
             base_url=cls.LITELLM_BASE_URL,
             temperature=cls.LLM_TEMPERATURE,
             top_p=cls.LLM_TOP_P,
-            max_tokens=cls.LLM_MAX_TOKENS,
+            max_tokens=cls.LLM_CHECKER_MAX_TOKENS,
+            include_response_headers=True,
+            rate_limiter=rate_limiter,
+            max_retries=cls.MAX_RETRIES
+        )
+
+    @classmethod
+    def get_llm_generator(cls):
+        """Initialize Generator LLM through LiteLLM Gateway."""
+        rate_limiter = InMemoryRateLimiter(
+            requests_per_second=cls.LLM_RATE_LIMITER,
+            max_bucket_size=1
+        )
+        return ChatOpenAI(
+            model=cls.LLM_MODEL_GENERATOR,
+            api_key=cls.LITELLM_API_KEY,
+            base_url=cls.LITELLM_BASE_URL,
+            temperature=cls.LLM_TEMPERATURE,
+            top_p=cls.LLM_TOP_P,
+            max_tokens=cls.LLM_GENERATOR_MAX_TOKENS,
             include_response_headers=True,
             rate_limiter=rate_limiter,
             max_retries=cls.MAX_RETRIES

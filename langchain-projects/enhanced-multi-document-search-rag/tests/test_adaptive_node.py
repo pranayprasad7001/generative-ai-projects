@@ -147,6 +147,32 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated_state.answer_relevance_grade, "yes")
         self.mock_llm.with_structured_output.assert_called_once_with(AnswerRelevanceGrade)
 
+    def test_dual_model_routing(self):
+        """Verify that llm_checker is used for evaluation and llm_generator for answer generation."""
+        mock_generator = MagicMock()
+        mock_checker = MagicMock()
+        from nodes.adaptive_node import AdaptiveRAGNodes
+        dual_nodes = AdaptiveRAGNodes(self.mock_retriever, llm_generator=mock_generator, llm_checker=mock_checker)
+
+        # 1. Check query_analyzer calls mock_checker
+        mock_structured_checker = MagicMock()
+        mock_structured_checker.invoke.return_value = ToolUse(tool_type="vector_search", analysis="test")
+        mock_checker.with_structured_output.return_value = mock_structured_checker
+
+        state = AdaptiveRAGState(question="Test question")
+        dual_nodes.query_analyzer(state)
+        mock_checker.with_structured_output.assert_called_with(ToolUse)
+        mock_generator.with_structured_output.assert_not_called()
+
+        # 2. Check answer_generator calls mock_generator
+        mock_invoker = MagicMock()
+        mock_invoker.invoke.return_value = AIMessage(content="Generated answer")
+        mock_generator.bind.return_value = mock_invoker
+
+        state_gen = AdaptiveRAGState(question="Test", retrieved_docs=[Document(page_content="Content")])
+        dual_nodes.answer_generator(state_gen)
+        mock_generator.bind.assert_called_once()
+
     def test_query_router(self):
         state_vector = AdaptiveRAGState(question="query", tool_type="vector_search")
         self.assertEqual(self.nodes.query_router(state_vector), "vector_search")

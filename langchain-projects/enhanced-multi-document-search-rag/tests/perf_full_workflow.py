@@ -26,14 +26,19 @@ async def main():
     retriever = vector_store.get_retriever(search_type="similarity")
     print(f"VectorStoreManager initialized in {time.time() - start:.4f} seconds")
 
-    print("Initializing LLM...")
+    print("Initializing LLMs...")
     start = time.time()
-    llm = Config.get_llm()
-    print(f"LLM initialized in {time.time() - start:.4f} seconds")
+    llm_generator = Config.get_llm_generator()
+    llm_checker = Config.get_llm_checker()
+    print(f"LLMs initialized in {time.time() - start:.4f} seconds")
 
     print("Building RAG Graph...")
     start = time.time()
-    graph_builder = GraphBuilder(retriever=retriever, llm=llm)
+    graph_builder = GraphBuilder(
+        retriever=retriever,
+        llm_generator=llm_generator,
+        llm_checker=llm_checker
+    )
     graph_builder.build_graph()
     print(f"RAG Graph built in {time.time() - start:.4f} seconds")
 
