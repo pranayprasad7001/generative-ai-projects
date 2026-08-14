@@ -18,7 +18,7 @@ model_list:
 
   - model_name: nemotron-3-ultra-550b-a55b
     litellm_params:
-      model: nvidia_nim/nemotron-3-ultra-550b-a55b
+      model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
       api_key: os.environ/NVIDIA_API_KEY
       api_base: os.environ/NVIDIA_API_BASE
       max_tokens: 16384
@@ -36,17 +36,30 @@ model_list:
     litellm_params:
       model: cohere/embed-english-v3.0
       api_key: os.environ/COHERE_API_KEY
-      rpm: 30
-      tpm: 8000
+      max_batch_size: 96
+      rpm: 20
+
+  - model_name: gemini-embedding-2
+    litellm_params:
+      model: gemini/gemini-embedding-2
+      api_key: os.environ/GOOGLE_API_KEY
+      rpm: 13
+      tpm: 100000
 
 router_settings:
   num_retries: 2
   timeout: 25
   fallbacks:
     - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2", "gpt-oss-120b-groq", "gpt-oss-20b-groq"]
+  enable_pre_call_checks: true
+  optional_pre_call_checks:
+    - enforce_model_rate_limits
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
 
 litellm_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY
+  drop_params: true
   cache: True
   cache_params:
     type: redis-semantic

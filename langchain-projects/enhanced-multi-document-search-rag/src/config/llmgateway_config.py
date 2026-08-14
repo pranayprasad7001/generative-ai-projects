@@ -4,7 +4,7 @@ import os
 import litellm
 import logging
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.rate_limiters import InMemoryRateLimiter
 
 # Load environment variables
@@ -91,6 +91,7 @@ class Config:
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
 
     # Document Processing
+    OUTPUT_DIMENSION = 768
     CHUNK_SIZE = 500
     CHUNK_OVERLAP = 50
     COHERE_RERANKER_TOP_N = 5
@@ -99,8 +100,8 @@ class Config:
     
     # Generation parameters
     LLM_TEMPERATURE = 0.2
-    LLM_TOP_P = 0.9
-    LLM_MAX_TOKENS = 6000
+    LLM_TOP_P = 1.0
+    LLM_MAX_TOKENS = 7000
     LLM_RATE_LIMITER = 0.5
     MAX_RETRIES = 3
 
@@ -127,4 +128,15 @@ class Config:
             include_response_headers=True,
             rate_limiter=rate_limiter,
             max_retries=cls.MAX_RETRIES
+        )
+
+    @classmethod
+    def get_embeddings(cls):
+        """Initialize Embeddings through LiteLLM Gateway."""
+        return OpenAIEmbeddings(
+            model=cls.EMBEDDING_MODEL,
+            api_key=cls.LITELLM_API_KEY,
+            base_url=cls.LITELLM_BASE_URL,
+            dimensions=cls.OUTPUT_DIMENSION,
+            check_embedding_ctx_length=False
         )
