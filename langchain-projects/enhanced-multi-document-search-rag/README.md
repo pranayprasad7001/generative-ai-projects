@@ -54,28 +54,28 @@ External MCP tool calls are additionally protected by middleware that validates 
 
 ```text
                          ┌───────────────────────────┐
-                         │      User / Application    │
+                         │      User / Application   │
                          │                           │
-                         │ Query + Runtime Input      │
+                         │ Query + Runtime Input     │
                          └─────────────┬─────────────┘
                                        │
                                        ▼
-                         ┌───────────────────────────┐
+                         ┌────────────────────────────┐
                          │      INPUT GUARDRAILS      │
-                         │                           │
+                         │                            │
                          │ • PII Middleware           │
                          │ • Deterministic Filtering  │
                          │ • LLM Security Check       │
-                         └─────────────┬─────────────┘
+                         └─────────────┬──────────────┘
                                        │
                               Safe Input Only
                                        │
                                        ▼
                          ┌───────────────────────────┐
-                         │       QUERY ANALYZER       │
+                         │       QUERY ANALYZER      │
                          │                           │
-                         │ Local RAG or External      │
-                         │ Search Classification      │
+                         │ Local RAG or External     │
+                         │ Search Classification     │
                          └─────────────┬─────────────┘
                                        │
                     ┌──────────────────┴──────────────────┐
@@ -109,27 +109,27 @@ External MCP tool calls are additionally protected by middleware that validates 
           ▼                 ▼                            │
        Generate        Query Rewrite                     │
           │                 │                            │
-          │                 └──────► Retrieval            │
-          │                                             │
-          ▼                                             │
-   Hallucination Check                                  │
-          │                                             │
-     ┌────┴────┐                                        │
-     │         │                                        │
- Grounded  Ungrounded                                   │
-     │         │                                        │
-     │         └──────► Regenerate                      │
-     │                                                  │
-     ▼                                                  │
- Answer Relevance                                       │
-     │                                                  │
- ┌───┴────┐                                             │
- │        │                                             │
-Relevant Weak                                           │
- │        │                                             │
+          │                 └──────► Retrieval           │
+          │                                              │
+          ▼                                              │
+   Hallucination Check                                   │
+          │                                              │
+     ┌────┴────┐                                         │
+     │         │                                         │
+ Grounded  Ungrounded                                    │
+     │         │                                         │
+     │         └──────► Regenerate                       │
+     │                                                   │
+     ▼                                                   │
+ Answer Relevance                                        │
+     │                                                   │
+ ┌───┴────┐                                              │
+ │        │                                              │
+Relevant Weak                                            │
+ │        │                                              │
  │        └────────────► Query Rewrite                   │
- │                                                      │
- └──────────────────────┬───────────────────────────────┘
+ │                                                       │
+ └──────────────────────┬────────────────────────────────┘
                         │
                         ▼
               ┌────────────────────────┐
@@ -287,9 +287,9 @@ The local retrieval pipeline combines semantic and lexical retrieval.
           ▼                       ▼
    Dense Retrieval              BM25
    AstraDB Vector Store       Lexical Search
-          │
-     Similarity / MMR
-          │
+          │                       │
+     Similarity / MMR             │
+          │                       │
           └───────────┬───────────┘
                       ▼
               EnsembleRetriever
@@ -555,9 +555,9 @@ Insufficient / External Knowledge Required
 External Search Agent
    ↓
 MCP
- ┌──────┬──────────┐
- ▼      ▼          ▼
-Tavily Wikipedia  arXiv
+   ┌──────┬──────────┐
+   ▼      ▼          ▼
+ Tavily Wikipedia  arXiv
    │      │          │
    └──────┴──────────┘
              ↓
