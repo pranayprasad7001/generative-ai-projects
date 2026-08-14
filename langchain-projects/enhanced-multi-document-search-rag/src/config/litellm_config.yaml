@@ -43,12 +43,13 @@ model_list:
     litellm_params:
       model: gemini/gemini-embedding-2
       api_key: os.environ/GOOGLE_API_KEY
-      rpm: 13
-      tpm: 100000
+      max_batch_size: 100
+      rpm: 100
+      tpm: 30000
 
 router_settings:
-  num_retries: 2
-  timeout: 25
+  num_retries: 5
+  timeout: 60
   fallbacks:
     - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2", "gpt-oss-120b-groq", "gpt-oss-20b-groq"]
   enable_pre_call_checks: true
