@@ -200,11 +200,25 @@ class AdaptiveRAGNodes:
                     ("user", state.question)
                 ]
             },
-            config={"recursion_limit": 8}
+            config={"recursion_limit": 100}
         )
         
         messages = response.get("messages", [])
-        answer = messages[-1].content if messages else response.get("output", "")
+        raw_answer = messages[-1].content if messages else response.get("output", "")
+        if isinstance(raw_answer, list):
+            answer_parts = []
+            for part in raw_answer:
+                if isinstance(part, dict) and "text" in part:
+                    answer_parts.append(str(part["text"]))
+                elif isinstance(part, str):
+                    answer_parts.append(part)
+                else:
+                    answer_parts.append(str(part))
+            answer = "\n".join(answer_parts)
+        elif isinstance(raw_answer, str):
+            answer = raw_answer
+        else:
+            answer = str(raw_answer) if raw_answer is not None else ""
         
         state.external_results = answer
         state.answer = answer
@@ -213,7 +227,22 @@ class AdaptiveRAGNodes:
         citations = []
         for msg in messages:
             if isinstance(msg, ToolMessage) and msg.content:
-                urls = re.findall(r'https?://[^\s\)\]\"\']+', msg.content)
+                if isinstance(msg.content, str):
+                    content_str = msg.content
+                elif isinstance(msg.content, list):
+                    parts = []
+                    for item in msg.content:
+                        if isinstance(item, dict) and "text" in item:
+                            parts.append(str(item["text"]))
+                        elif isinstance(item, str):
+                            parts.append(item)
+                        else:
+                            parts.append(str(item))
+                    content_str = "\n".join(parts)
+                else:
+                    content_str = str(msg.content)
+
+                urls = re.findall(r'https?://[^\s\)\]\"\']+', content_str)
                 for url in urls:
                     if url not in citations:
                         citations.append(url)
