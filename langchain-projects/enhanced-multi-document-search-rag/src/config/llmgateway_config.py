@@ -3,6 +3,7 @@
 import os
 import litellm
 import logging
+from pydantic import ConfigDict
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.rate_limiters import InMemoryRateLimiter
@@ -45,6 +46,58 @@ try:
     })
 except Exception as e:
     logging.getLogger(__name__).warning("Failed to register custom models in LiteLLM: %s", e)
+
+class RateLimitedOpenAIEmbeddings(OpenAIEmbeddings):
+    """OpenAIEmbeddings subclass with strict rate limiting to enforce RPM and TPM limits."""
+    
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    rate_limiter: InMemoryRateLimiter | None = None
+
+    def __init__(self, *args, rate_limiter: InMemoryRateLimiter | None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.rate_limiter = rate_limiter
+
+    def embed_documents(self, texts: list[str], chunk_size: int | None = None, **kwargs) -> list[list[float]]:
+        """Call OpenAI's embedding endpoint with rate-limited chunking."""
+        self._ensure_sync_client_available()
+        chunk_size_ = chunk_size or self.chunk_size
+        client_kwargs = {**self._invocation_params, **kwargs}
+        embeddings: list[list[float]] = []
+
+        for i in range(0, len(texts), chunk_size_):
+            if self.rate_limiter:
+                self.rate_limiter.acquire()
+            batch = texts[i : i + chunk_size_]
+            response = self.client.create(input=batch, **client_kwargs)
+            if not isinstance(response, dict):
+                response = response.model_dump()
+            embeddings.extend(r["embedding"] for r in response["data"])
+        return embeddings
+
+    def embed_query(self, text: str) -> list[float]:
+        """Embed a single query with rate limiting (delegates to rate-limited embed_documents)."""
+        return self.embed_documents([text])[0]
+
+    async def aembed_documents(self, texts: list[str], chunk_size: int | None = None, **kwargs) -> list[list[float]]:
+        """Asynchronously call OpenAI's embedding endpoint with rate-limited chunking."""
+        chunk_size_ = chunk_size or self.chunk_size
+        client_kwargs = {**self._invocation_params, **kwargs}
+        embeddings: list[list[float]] = []
+
+        for i in range(0, len(texts), chunk_size_):
+            if self.rate_limiter:
+                await self.rate_limiter.aacquire()
+            batch = texts[i : i + chunk_size_]
+            response = await self.async_client.create(input=batch, **client_kwargs)
+            if not isinstance(response, dict):
+                response = response.model_dump()
+            embeddings.extend(r["embedding"] for r in response["data"])
+        return embeddings
+
+    async def aembed_query(self, text: str) -> list[float]:
+        """Asynchronously embed a single query with rate limiting (delegates to aembed_documents)."""
+        embeddings = await self.aembed_documents([text])
+        return embeddings[0]
 
 class Config:
     """Configuration class for RAG system"""
@@ -95,7 +148,13 @@ class Config:
     LLM_GENERATOR_MAX_TOKENS = 3000
     LLM_CHECKER_MAX_TOKENS = 2048
     LLM_RATE_LIMITER = 0.5
-    MAX_RETRIES = 3
+    MAX_RETRIES = 1
+    EMBEDDING_RATE_LIMITER = 0.25
+    EMBEDDING_BATCH_SIZE = 10
+
+    # Singleton Rate Limiters
+    _llm_rate_limiter: InMemoryRateLimiter | None = None
+    _embedding_rate_limiter: InMemoryRateLimiter | None = None
 
     # Default URLs
     DEFAULT_URLS = [
@@ -104,12 +163,28 @@ class Config:
     ]
     
     @classmethod
+    def get_llm_rate_limiter(cls) -> InMemoryRateLimiter:
+        """Get or initialize the shared singleton LLM rate limiter."""
+        if cls._llm_rate_limiter is None:
+            cls._llm_rate_limiter = InMemoryRateLimiter(
+                requests_per_second=cls.LLM_RATE_LIMITER,
+                max_bucket_size=1
+            )
+        return cls._llm_rate_limiter
+
+    @classmethod
+    def get_embedding_rate_limiter(cls) -> InMemoryRateLimiter:
+        """Get or initialize the shared singleton embedding rate limiter."""
+        if cls._embedding_rate_limiter is None:
+            cls._embedding_rate_limiter = InMemoryRateLimiter(
+                requests_per_second=cls.EMBEDDING_RATE_LIMITER,
+                max_bucket_size=1
+            )
+        return cls._embedding_rate_limiter
+
+    @classmethod
     def get_llm_checker(cls):
         """Initialize Checker/Evaluator LLM through LiteLLM Gateway."""
-        rate_limiter = InMemoryRateLimiter(
-            requests_per_second=cls.LLM_RATE_LIMITER,
-            max_bucket_size=1
-        )
         return ChatOpenAI(
             model=cls.LLM_MODEL_CHECKER,
             api_key=cls.LITELLM_API_KEY,
@@ -118,17 +193,13 @@ class Config:
             top_p=cls.LLM_TOP_P,
             max_tokens=cls.LLM_CHECKER_MAX_TOKENS,
             include_response_headers=True,
-            rate_limiter=rate_limiter,
+            rate_limiter=cls.get_llm_rate_limiter(),
             max_retries=cls.MAX_RETRIES
         )
 
     @classmethod
     def get_llm_generator(cls):
         """Initialize Generator LLM through LiteLLM Gateway."""
-        rate_limiter = InMemoryRateLimiter(
-            requests_per_second=cls.LLM_RATE_LIMITER,
-            max_bucket_size=1
-        )
         return ChatOpenAI(
             model=cls.LLM_MODEL_GENERATOR,
             api_key=cls.LITELLM_API_KEY,
@@ -137,20 +208,21 @@ class Config:
             top_p=cls.LLM_TOP_P,
             max_tokens=cls.LLM_GENERATOR_MAX_TOKENS,
             include_response_headers=True,
-            rate_limiter=rate_limiter,
+            rate_limiter=cls.get_llm_rate_limiter(),
             max_retries=cls.MAX_RETRIES
         )
 
     @classmethod
     def get_embeddings(cls):
-        """Initialize Embeddings through LiteLLM Gateway."""
-        return OpenAIEmbeddings(
+        """Initialize Rate-Limited Embeddings through LiteLLM Gateway."""
+        return RateLimitedOpenAIEmbeddings(
             model=cls.EMBEDDING_MODEL,
             api_key=cls.LITELLM_API_KEY,
             base_url=cls.LITELLM_BASE_URL,
             dimensions=cls.OUTPUT_DIMENSION,
             check_embedding_ctx_length=False,
-            chunk_size=100,
-            max_retries=6,
+            chunk_size=cls.EMBEDDING_BATCH_SIZE,
+            rate_limiter=cls.get_embedding_rate_limiter(),
+            max_retries=cls.MAX_RETRIES,
             timeout=60.0
         )
