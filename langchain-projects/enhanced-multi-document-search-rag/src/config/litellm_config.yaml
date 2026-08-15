@@ -1,21 +1,5 @@
 model_list:
 
-  - model_name: gpt-oss-120b-groq
-    litellm_params:
-      model: groq/openai/gpt-oss-120b
-      api_key: os.environ/GROQ_API_KEY
-      max_tokens: 65536
-      rpm: 30
-      tpm: 8000
-
-  - model_name: gpt-oss-20b-groq
-    litellm_params:
-      model: groq/openai/gpt-oss-20b
-      api_key: os.environ/GROQ_API_KEY
-      max_tokens: 65536
-      rpm: 30
-      tpm: 8000
-
   - model_name: nemotron-3-ultra-550b-a55b
     litellm_params:
       model: nvidia_nim/nvidia/nemotron-3-ultra-550b-a55b
@@ -32,12 +16,13 @@ model_list:
       max_tokens: 16384
       rpm: 40
 
-  - model_name: embed-english-v3.0
+  - model_name: nemotron-3-nano
     litellm_params:
-      model: cohere/embed-english-v3.0
-      api_key: os.environ/COHERE_API_KEY
-      max_batch_size: 96
-      rpm: 5
+      model: nvidia_nim/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+      api_key: os.environ/NVIDIA_API_KEY
+      api_base: os.environ/NVIDIA_API_BASE
+      max_completion_tokens: 65536
+      rpm: 40
 
   - model_name: gemini-embedding-2
     litellm_params:
@@ -52,7 +37,7 @@ router_settings:
   timeout: 60
   fallbacks:
     - nemotron-3-ultra-550b-a55b: ["nvidia-glm-5.2"]
-    - gpt-oss-120b-groq: ["gpt-oss-20b-groq"]
+    - nemotron-3-nano: ["nvidia-glm-5.2"]
 
   enable_pre_call_checks: true
   optional_pre_call_checks:

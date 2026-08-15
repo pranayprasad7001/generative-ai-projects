@@ -23,8 +23,8 @@ try:
             "mode": "chat"
         },
 
-        "nvidia-glm-5.2": {
-            "max_tokens": 16384,
+        "nemotron-3-nano": {
+            "max_tokens": 65536,
             "input_cost_per_token": 0.0,
             "output_cost_per_token": 0.0,
             "cache_creation_input_token_cost": 0.0,
@@ -33,22 +33,12 @@ try:
             "mode": "chat"
         },
 
-        "gpt-oss-120b-groq": {
-            "max_tokens": 65536,
-            "input_cost_per_token": 0.00000015,
-            "output_cost_per_token": 0.00000060,
-            "cache_creation_input_token_cost": 0.00000015,
-            "cache_read_input_token_cost": 0.000000075,
-            "litellm_provider": "openai",
-            "mode": "chat"
-        },
-
-        "gpt-oss-20b-groq": {
-            "max_tokens": 65536,
-            "input_cost_per_token": 0.000000075,
-            "output_cost_per_token": 0.00000030,
-            "cache_creation_input_token_cost": 0.000000075,
-            "cache_read_input_token_cost": 0.0000000375,
+        "nvidia-glm-5.2": {
+            "max_tokens": 16384,
+            "input_cost_per_token": 0.0,
+            "output_cost_per_token": 0.0,
+            "cache_creation_input_token_cost": 0.0,
+            "cache_read_input_token_cost": 0.0,
             "litellm_provider": "openai",
             "mode": "chat"
         }
@@ -86,7 +76,7 @@ class Config:
     LITELLM_API_KEY = os.getenv("LITELLM_MASTER_KEY")
 
     # Logical model name defined in litellm_config.yaml
-    LLM_MODEL_CHECKER = "gpt-oss-120b-groq"
+    LLM_MODEL_CHECKER = "nemotron-3-nano"
     LLM_MODEL_GENERATOR = "nemotron-3-ultra-550b-a55b"
     EMBEDDING_MODEL = "gemini-embedding-2"
     COHERE_RERANKER_MODEL = "rerank-english-v3.0"
@@ -103,7 +93,7 @@ class Config:
     LLM_TEMPERATURE = 0.2
     LLM_TOP_P = 1.0
     LLM_GENERATOR_MAX_TOKENS = 3000
-    LLM_CHECKER_MAX_TOKENS = 400
+    LLM_CHECKER_MAX_TOKENS = 2048
     LLM_RATE_LIMITER = 0.5
     MAX_RETRIES = 3
 
