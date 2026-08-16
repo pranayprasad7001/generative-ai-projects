@@ -246,6 +246,60 @@ class TestRAGIntegrationWorkflows(unittest.IsolatedAsyncioTestCase):
         self.assertIn("cannot process this request", result.get("answer", ""))
         self.mock_llm_generator.bind.assert_not_called()
 
+    async def test_output_guardrail_rewrite_triggers_revalidation(self):
+        """Test that if the output guardrail modifies an answer, it routes back to hallucination validation."""
+        # 1. Input Guardrail: SAFE
+        self.mock_input_agent.ainvoke.return_value = {"messages": [AIMessage(content="SAFE")]}
+
+        # 2. Query Analyzer: hybrid_retrieval
+        mock_analyzer = MagicMock()
+        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="hybrid_retrieval", analysis="Local search"))
+
+        # 3. Documents Grader: yes
+        mock_doc_grader = MagicMock()
+        mock_doc_grader.ainvoke = AsyncMock(return_value=RetrievalGrade(grade="yes", reasoning="Documents sufficient"))
+
+        # 4. Hallucination Grader: called twice (initial generation + after guardrail rewrite)
+        mock_hallucination = MagicMock()
+        mock_hallucination.ainvoke = AsyncMock(return_value=HallucinationGrade(grade="yes", reasoning="Grounded"))
+
+        # 5. Relevance Grader: called twice (initial + after guardrail revalidation)
+        mock_relevance = MagicMock()
+        mock_relevance.ainvoke = AsyncMock(return_value=AnswerRelevanceGrade(grade="yes", reasoning="Relevant"))
+
+        def structured_output_side_effect(schema):
+            if schema == ToolUse:
+                return mock_analyzer
+            elif schema == RetrievalGrade:
+                return mock_doc_grader
+            elif schema == HallucinationGrade:
+                return mock_hallucination
+            elif schema == AnswerRelevanceGrade:
+                return mock_relevance
+            return MagicMock()
+
+        self.mock_llm_checker.with_structured_output.side_effect = structured_output_side_effect
+
+        test_docs = [Document(page_content="LangChain is a framework for developing applications powered by LLMs.")]
+        self.mock_retriever.invoke.return_value = test_docs
+
+        mock_gen_invoker = MagicMock()
+        mock_gen_invoker.ainvoke = AsyncMock(return_value=AIMessage(content="Initial draft with raw info."))
+        self.mock_llm_generator.bind.return_value = mock_gen_invoker
+
+        # Output guardrail modifies the answer on first pass, leaves unchanged on second pass
+        self.mock_output_agent.ainvoke.side_effect = [
+            {"messages": [AIMessage(content="Sanitized clean answer.")]},
+            {"messages": [AIMessage(content="Sanitized clean answer.")]},
+        ]
+
+        result = await self.graph_builder.run("What is LangChain?")
+
+        self.assertEqual(result.get("answer"), "Sanitized clean answer.")
+        self.assertEqual(result.get("success"), True)
+        # Hallucination detector was called at least twice (initial + recheck)
+        self.assertGreaterEqual(mock_hallucination.ainvoke.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

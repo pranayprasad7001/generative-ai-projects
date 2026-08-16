@@ -34,7 +34,7 @@ class GenerationNodes:
         documents_content: str = "\n\n".join(context_sections) if context_sections else "No relevant documents found."
 
         # Self-correction regeneration branch if previously flagged for hallucination
-        critique = state.grounding_reasoning or state.analysis
+        critique = state.grounding_evaluation or state.analysis
         if state.generate_count > 0 and state.hallucination_grade in ("no", "retry", "fail") and critique:
             logger.info("Executing critique-aware self-correction answer regeneration.")
             prompt = ChatPromptTemplate.from_messages([

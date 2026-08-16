@@ -108,7 +108,7 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(docs[0].metadata["source"], csv_path)
         self.assertEqual(docs[0].metadata["loader"], "CSVLoader")
         self.assertEqual(docs[0].metadata["row"], 0)
-        self.assertEqual(docs[0].metadata["chunk_strategy"], "recursive")
+        self.assertEqual(docs[0].metadata["chunk_strategy"], "row_level")
         self.assertEqual(docs[0].metadata["chunk_index"], 0)
         self.assertEqual(docs[0].metadata["doc_version"], "v1")
         self.assertIn("chunk_size", docs[0].metadata)
@@ -135,8 +135,27 @@ class TestDocumentProcessor(unittest.TestCase):
                 self.assertEqual(len(docs), 1)
                 self.assertEqual(docs[0].page_content, "Hello text content")
 
+    def test_load_documents_detailed_reporting(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            txt_file = Path(tmpdir) / "test.txt"
+            txt_file.write_text("Hello structured reporting", encoding="utf-8")
+
+            bad_file = Path(tmpdir) / "test.unsupported"
+            bad_file.write_text("bad data")
+
+            with patch.object(self.processor, "load_from_text") as mock_load_text:
+                mock_load_text.return_value = [Document(page_content="Hello structured reporting")]
+                self.processor.supported_loaders[".txt"] = mock_load_text
+
+                res = self.processor.load_documents_detailed([str(txt_file), str(bad_file), "non_existent.txt"])
+                self.assertEqual(res.processed_count, 1)
+                self.assertEqual(res.failed_count, 2)
+                self.assertEqual(len(res.documents), 1)
+                self.assertEqual(len(res.failed_files), 2)
+                self.assertEqual(len(res.errors), 2)
+
     def test_load_documents_invalid_path(self):
-        with self.assertRaises(FileNotFoundError):
+        with self.assertRaises(ValueError):
             self.processor.load_documents(["non_existent_file.txt"])
 
 if __name__ == "__main__":

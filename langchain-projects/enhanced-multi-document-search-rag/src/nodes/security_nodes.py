@@ -3,7 +3,7 @@ import logging
 import time
 from state.adaptive_state import AdaptiveRAGState
 from langchain_core.messages import HumanMessage
-from nodes.guardrails import Guardrails
+from nodes.guardrails import Guardrails, sanitize_pii
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +19,19 @@ class SecurityNodes:
         self.output_guardrail_agent = self.guardrails.get_output_guardrail_agent()
 
     async def input_query_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
-        """Validate the user's query before entering the RAG workflow."""
+        """Validate the user's query before entering the RAG workflow and sanitize PII."""
         t0 = time.perf_counter()
         logger.info("Running input security check.")
-        logger.debug("Input query content: %s", state.question)
+
+        # Sanitize PII before downstream routing and document retrieval
+        sanitized_question = sanitize_pii(state.question)
+        state.question = sanitized_question
+        if not state.original_question:
+            state.original_question = sanitized_question
+        else:
+            state.original_question = sanitize_pii(state.original_question)
+
+        logger.debug("Input query content (PII-sanitized): %s", state.question)
 
         try:
             response = await self.input_guardrail_agent.ainvoke(
@@ -75,14 +84,17 @@ class SecurityNodes:
         return state
 
     async def output_answer_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
-        """Validate and sanitize the final generated answer with fail-closed safety."""
+        """Validate and sanitize the final generated answer with fail-closed safety and modification tracking."""
         t0 = time.perf_counter()
         logger.info("Running output security check.")
         logger.debug("Raw generated answer: %s", state.answer)
 
         if not state.answer:
             logger.warning("Empty answer provided to output security check.")
+            state.output_modified = False
             return state
+
+        original_answer = state.answer
 
         try:
             response = await self.output_guardrail_agent.ainvoke(
@@ -98,22 +110,34 @@ class SecurityNodes:
             if not messages:
                 logger.warning("Output security check failed to return messages. Failing closed for safety.")
                 state.answer = "⚠️ The generated answer could not be verified by security guardrails. Please rephrase your question."
+                state.output_modified = False
                 return state
 
             last_message = messages[-1]
             sanitized_answer = last_message.content if hasattr(last_message, "content") else str(last_message)
 
             if sanitized_answer and sanitized_answer.strip():
-                state.answer = sanitized_answer.strip()
+                clean_sanitized = sanitized_answer.strip()
+                # Check if guardrail modified/rewrote the answer
+                if clean_sanitized != original_answer.strip():
+                    logger.info("Output guardrail modified the answer. Flagging for re-validation.")
+                    state.output_modified = True
+                    state.guardrail_recheck_count += 1
+                else:
+                    state.output_modified = False
+                state.answer = clean_sanitized
                 logger.info("Output answer validated/sanitized successfully.")
             else:
                 logger.warning("Output security check returned empty content. Failing closed for safety.")
                 state.answer = "⚠️ The generated answer could not be verified by security guardrails. Please rephrase your question."
+                state.output_modified = False
 
         except Exception as e:
             logger.error("Exception during output security guardrail check: %s. Failing closed.", e, exc_info=True)
             state.answer = "⚠️ The generated answer could not be verified by security guardrails. Please rephrase your question."
+            state.output_modified = False
 
         elapsed = time.perf_counter() - t0
         state.latency_breakdown["security_output"] = round(elapsed, 4)
         return state
+

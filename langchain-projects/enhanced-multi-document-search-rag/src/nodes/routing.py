@@ -90,3 +90,24 @@ def answer_relevance_router(state: AdaptiveRAGState) -> str:
             return "output_answer_security_check"
         return "external_search"
     return "query_rewriter"
+
+
+def output_answer_security_router(state: AdaptiveRAGState) -> str:
+    """
+    Route after output security check.
+    If the output guardrail modified/rewrote the answer, run hallucination and
+    relevance validation again (with a loop guard) to ensure the rewritten answer
+    remains grounded and relevant.
+    """
+    if getattr(state, "output_modified", False) and not state.query_blocked and state.guardrail_recheck_count <= 1:
+        logger.info(
+            "Routing from output guardrail back to hallucination_detector (guardrail recheck count: %d).",
+            state.guardrail_recheck_count
+        )
+        # Reset output_modified flag for the recheck pass
+        state.output_modified = False
+        return "hallucination_detector"
+
+    logger.info("Routing from output security check to end.")
+    return "end"
+

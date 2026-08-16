@@ -23,6 +23,7 @@ from nodes.routing import (
     grader_router,
     hallucination_router,
     answer_relevance_router,
+    output_answer_security_router,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,3 +166,4 @@ class AdaptiveRAGNodes:
     grader_router = staticmethod(grader_router)
     hallucination_router = staticmethod(hallucination_router)
     answer_relevance_router = staticmethod(answer_relevance_router)
+    output_answer_security_router = staticmethod(output_answer_security_router)

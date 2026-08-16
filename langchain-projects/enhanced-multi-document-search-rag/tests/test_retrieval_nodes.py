@@ -63,6 +63,7 @@ class TestRetrievalNodes(unittest.IsolatedAsyncioTestCase):
         state = AdaptiveRAGState(question="What is RAG?")
         updated_state = await self.nodes.query_rewriter(state)
         self.assertEqual(updated_state.question, "What is retrieval augmented generation?")
+        self.assertEqual(updated_state.rewrite_explanation, "Expanded acronym")
         self.assertEqual(updated_state.rewrite_reasoning, "Expanded acronym")
         self.assertEqual(updated_state.rewrite_count, 1)
 

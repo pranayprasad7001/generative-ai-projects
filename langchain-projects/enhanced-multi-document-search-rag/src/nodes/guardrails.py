@@ -1,3 +1,4 @@
+import re
 import logging
 from contextvars import ContextVar
 from typing import Any, Callable, Awaitable
@@ -25,6 +26,33 @@ logger = logging.getLogger(__name__)
 
 # Request-scoped tool calls counter context variable
 _tool_calls_counter_ctx: ContextVar[int] = ContextVar("tool_calls_counter_ctx", default=0)
+
+PII_PATTERNS = {
+    "api_key": re.compile(r"\b(?:sk-(?:proj-)?[a-zA-Z0-9_-]{20,100}|AIza[0-9A-Za-z-_]{35}|gsk_[a-zA-Z0-9]{48,64}|sk-ant-[a-zA-Z0-9_-]{20,100}|ghp_[a-zA-Z0-9]{36})\b"),
+    "email": re.compile(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b"),
+    "ssn": re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    "credit_card": re.compile(r"\b(?:\d[ -]*?){13,16}\b"),
+    "phone_number": re.compile(r"\b(?:\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
+    "ip_address": re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b"),
+}
+
+
+def sanitize_pii(text: str) -> str:
+    """
+    Deterministically sanitize/redact PII (emails, phone numbers, credit cards, SSNs, API keys, IPs)
+    from text to ensure sensitive data is not propagated through state.question or downstream nodes.
+    """
+    if not text or not isinstance(text, str):
+        return text
+    sanitized = text
+    sanitized = PII_PATTERNS["api_key"].sub("[REDACTED_API_KEY]", sanitized)
+    sanitized = PII_PATTERNS["email"].sub("[REDACTED_EMAIL]", sanitized)
+    sanitized = PII_PATTERNS["ssn"].sub("[REDACTED_SSN]", sanitized)
+    sanitized = PII_PATTERNS["credit_card"].sub("[REDACTED_CREDIT_CARD]", sanitized)
+    sanitized = PII_PATTERNS["phone_number"].sub("[REDACTED_PHONE]", sanitized)
+    sanitized = PII_PATTERNS["ip_address"].sub("[REDACTED_IP]", sanitized)
+    return sanitized
+
 
 class ContentFilterMiddleware(AgentMiddleware):
     """

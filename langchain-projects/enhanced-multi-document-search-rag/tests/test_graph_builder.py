@@ -78,6 +78,8 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["question"], "What is AI?")
         self.assertEqual(result["answer"], "Artificial Intelligence refers to...")
         self.assertEqual(result["total_cost"], 0.0015)
+        self.assertEqual(result["success"], True)
+        self.assertIsNone(result["error"])
         mock_graph.ainvoke.assert_called_once()
 
     @patch("graph_builder.adaptive_graph_builder.CostTrackingCallbackHandler")
@@ -98,6 +100,9 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["question"], "What is AI?")
         self.assertIn("error occurred", result["answer"].lower())
         self.assertEqual(result["total_cost"], 0.0)
+        self.assertEqual(result["success"], False)
+        self.assertEqual(result["error"], "Connection Refused")
+        self.assertEqual(result["error_type"], "Exception")
 
     def test_clear_checkpointer(self):
         self.builder.build_graph(use_checkpointer=True)

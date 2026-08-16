@@ -5,7 +5,7 @@ This module provides multi-strategy document splitting:
 - Markdown header-aware splitting preserving document hierarchy
 - Experimental semantic chunking based on embedding distance breaks
 - Hybrid splitting combining structural headers, semantic chunking, and character windows
-- Automatic stamping of 5-dimension identity and version metadata
+- Automatic stamping of deterministic composite chunk identity based on document and chunk metadata
 """
 
 from enum import Enum

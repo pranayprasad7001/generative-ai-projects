@@ -47,6 +47,30 @@ class TestSecurityNodes(unittest.IsolatedAsyncioTestCase):
         state = AdaptiveRAGState(question="q", answer="raw answer")
         updated_state = await self.nodes.output_answer_security_check(state)
         self.assertEqual(updated_state.answer, "Sanitized Safe Answer")
+        self.assertTrue(updated_state.output_modified)
+        self.assertEqual(updated_state.guardrail_recheck_count, 1)
+
+    async def test_output_answer_security_check_unchanged(self):
+        mock_msg = AIMessage(content="Safe Answer")
+        self.mock_output_agent.ainvoke = AsyncMock(return_value={"messages": [mock_msg]})
+
+        state = AdaptiveRAGState(question="q", answer="Safe Answer")
+        updated_state = await self.nodes.output_answer_security_check(state)
+        self.assertEqual(updated_state.answer, "Safe Answer")
+        self.assertFalse(updated_state.output_modified)
+        self.assertEqual(updated_state.guardrail_recheck_count, 0)
+
+    async def test_input_query_security_check_sanitizes_pii(self):
+        mock_msg = AIMessage(content="SAFE")
+        self.mock_input_agent.ainvoke = AsyncMock(return_value={"messages": [mock_msg]})
+
+        state = AdaptiveRAGState(question="Contact me at test@example.com or call 555-123-4567")
+        updated_state = await self.nodes.input_query_security_check(state)
+        self.assertNotIn("test@example.com", updated_state.question)
+        self.assertIn("[REDACTED_EMAIL]", updated_state.question)
+        self.assertNotIn("555-123-4567", updated_state.question)
+        self.assertIn("[REDACTED_PHONE]", updated_state.question)
+        self.assertFalse(updated_state.query_blocked)
 
     async def test_input_query_security_check_unknown_fails_closed(self):
         mock_msg = AIMessage(content="MAYBE_SAFE_MAYBE_NOT_UNRECOGNIZED")
@@ -60,3 +84,4 @@ class TestSecurityNodes(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

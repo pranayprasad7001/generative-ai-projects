@@ -12,6 +12,7 @@ if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from fastapi.testclient import TestClient
+from langchain_classic.schema import Document
 from api import app
 
 
@@ -59,6 +60,8 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(data["question"], "What is AI?")
         self.assertEqual(data["answer"], "AI is Artificial Intelligence.")
         self.assertEqual(data["total_cost"], 0.0005)
+        self.assertEqual(data["success"], True)
+        self.assertIsNone(data["error"])
 
     @patch("api.rag_system")
     @patch("api.vector_store_manager")
@@ -72,6 +75,29 @@ class TestAPIEndpoints(unittest.TestCase):
         data = response.json()
         self.assertNotIn("database password secret", data["detail"])
         self.assertIn("An error occurred while processing the query", data["detail"])
+
+    @patch("api.doc_processor")
+    @patch("api.vector_store_manager")
+    def test_ingest_url_structured_response(self, mock_vsm, mock_dp):
+        from document_ingestion.document_processor import IngestionResult
+        mock_dp.load_documents_detailed.return_value = IngestionResult(
+            documents=[Document(page_content="doc content")],
+            processed_count=1,
+            failed_count=0,
+            processed_files=["https://example.com"],
+            failed_files=[],
+            errors=[]
+        )
+        mock_vsm.add_documents.return_value = 1
+
+        payload = {"urls": ["https://example.com"]}
+        response = self.client.post("/api/v1/ingest/url", json=payload)
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["chunks_indexed"], 1)
+        self.assertEqual(data["processed_count"], 1)
+        self.assertEqual(data["failed_count"], 0)
+        self.assertEqual(data["failed_files"], [])
 
     @patch("api.API_SECRET_KEY", "super-secret-test-key")
     def test_api_key_auth_enforcement(self):

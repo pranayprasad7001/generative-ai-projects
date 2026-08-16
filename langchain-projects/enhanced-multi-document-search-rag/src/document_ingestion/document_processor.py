@@ -3,9 +3,10 @@ import logging
 import socket
 from urllib.parse import urlparse
 from pathlib import Path
-from typing import List, Union
-from .chunker import Chunker, ChunkStrategy
+from typing import List, Union, Dict, Any, Optional
 from collections import defaultdict
+from pydantic import BaseModel, Field
+from .chunker import Chunker, ChunkStrategy
 from langchain_classic.schema import Document
 from bs4 import BeautifulSoup
 from langchain_community.document_loaders import (
@@ -19,6 +20,16 @@ from langchain_community.document_loaders import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class IngestionResult(BaseModel):
+    """Structured report returned by document ingestion pipeline detailing processed and failed sources."""
+    documents: List[Document] = Field(default_factory=list, description="All successfully extracted and chunked documents.")
+    processed_count: int = Field(default=0, description="Total number of successfully processed files/sources.")
+    failed_count: int = Field(default=0, description="Total number of failed files/sources.")
+    processed_files: List[str] = Field(default_factory=list, description="Names or paths of successfully processed files.")
+    failed_files: List[str] = Field(default_factory=list, description="Names or paths of files that failed ingestion.")
+    errors: List[Dict[str, str]] = Field(default_factory=list, description="List of error details with file and error message.")
 
 
 def validate_safe_url(url: str, allow_local: bool = False) -> str:
@@ -44,7 +55,15 @@ def validate_safe_url(url: str, allow_local: bool = False) -> str:
 
 
 class DocumentProcessor:
-    """Handles document loading and chunking"""
+    """
+    Handles multi-format document loading and chunking.
+    
+    Note on document strategies:
+    - Unstructured documents (PDF, TXT, DOCX, Markdown, XLSX, Web pages) use configurable text chunking
+      (recursive character, semantic embedding-based, or hybrid splitters).
+    - Tabular CSV documents use discrete row-level retrieval, where each row is treated as an independent
+      structured retrieval unit with preserved column headers, rather than undergoing arbitrary text splitting.
+    """
 
     def __init__(self, embeddings=None, chunk_size: int=500, chunk_overlap: int=50, allow_local_urls: bool = False):
         """
@@ -184,12 +203,17 @@ class DocumentProcessor:
 
     def load_from_csv(self, file_path: Union[str, Path], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
         """
-        Load document(s) from a CSV file
+        Load document(s) from a CSV file using row-level retrieval.
+        
+        Unlike unstructured documents that undergo character or semantic splitting,
+        each CSV row represents a structured, self-contained record. Each row is indexed
+        as a discrete retrieval unit with row index metadata.
+
         Args:
             file_path (Union[str, Path]): Path to the CSV file
-            strategy (str): Chunking strategy to use
+            strategy (ChunkStrategy): Chunking strategy identifier (preserved for schema compatibility)
         Returns:
-            List[Document]: List of documents
+            List[Document]: List of row-level documents
         """
         docs = CSVLoader(str(file_path)).load()
         strat_val = strategy.value if hasattr(strategy, "value") else str(strategy)
@@ -201,10 +225,10 @@ class DocumentProcessor:
             source=file_path,
             loader_name="CSVLoader",
             add_chunk=True,
-            chunk_strategy=strat_val
+            chunk_strategy="row_level" if strat_val == "recursive" else strat_val
         )
 
-        logger.info("Loaded %d rows from %s", len(docs), file_path)
+        logger.info("Loaded %d structured rows from %s (row-level retrieval unit)", len(docs), file_path)
         return docs_with_metadata
 
     def load_from_excel(self, file_path: Union[str, Path], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
@@ -236,70 +260,110 @@ class DocumentProcessor:
         Returns:
             List[Document]: Loaded documents.
         """
+        detailed = self.load_documents_detailed([str(directory)], strategy=strategy)
+        return detailed.documents
 
-        directory = Path(directory)
-        logger.info("Scanning directory for supported files: %s", directory)
+    def load_documents_detailed(self, sources: List[str], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> IngestionResult:
+        """
+        Load documents from supported sources with comprehensive structured reporting:
+        tracks successfully processed files, individual failure counts, failed filenames, and exact errors.
 
-        if not directory.exists():
-            raise FileNotFoundError(f"Directory not found: {directory}")
+        Args:
+            sources (List[str]): List of sources (URLs, file paths, directories)
+            strategy (ChunkStrategy): Chunking strategy to use
 
-        if not directory.is_dir():
-            raise NotADirectoryError(f"{directory} is not a directory")
+        Returns:
+            IngestionResult: Structured report with documents, processed/failed counts, and errors
+        """
+        result = IngestionResult()
+        logger.info("Starting detailed loading process for %d source(s) with strategy '%s'", len(sources), strategy)
 
-        docs: List[Document] = []
+        for src in sources:
+            logger.info("Processing source: %s", src)
 
-        grouped_files = defaultdict(list)
-
-        for file in sorted(directory.rglob("*")):
-
-            if not file.is_file():
-                continue
-
-            if file.name.startswith("~$"):
-                logger.debug("Skipping temporary file: %s", file)
-                continue
-            
-            if not file.suffix:
-                logger.debug("Skipping file with no extension: %s", file)
-                continue
-
-            if file.name.startswith("."):
-                logger.debug("Skipping hidden file: %s", file)
-                continue
-                
-            grouped_files[file.suffix.lower()].append(file)
-
-        total_files = sum(len(f) for f in grouped_files.values())
-        logger.info("Found %d file(s) across %d different extensions", total_files, len(grouped_files))
-
-        for extension, files in grouped_files.items():
-
-            loader = self.supported_loaders.get(extension)
-
-            if loader is None:
-                logger.warning("Skipping unsupported files with extension: %s", extension)
-                continue
-
-            logger.info(
-                "Loading %d %s file(s)...",
-                len(files),
-                extension,
-            )
-
-            for file in files:
+            if src.startswith(("http://", "https://")):
                 try:
-                    logger.debug("Loading file: %s", file)
-                    docs.extend(loader(file, strategy=strategy))
+                    loaded = self.load_from_url(src, strategy=strategy)
+                    result.documents.extend(loaded)
+                    result.processed_count += 1
+                    result.processed_files.append(src)
                 except Exception as e:
-                    logger.error("Failed to load file %s: %s", file, e)
+                    logger.error("Failed to load URL %s: %s", src, e)
+                    result.failed_count += 1
+                    result.failed_files.append(src)
+                    result.errors.append({"file": src, "error": str(e)})
+                continue
 
-        logger.info("Directory loading complete. Total chunks loaded: %d", len(docs))
-        return docs
+            path = Path(src)
+
+            if not path.exists():
+                logger.error("Source path does not exist: %s", path)
+                result.failed_count += 1
+                result.failed_files.append(src)
+                result.errors.append({"file": src, "error": f"File or directory not found: {path}"})
+                continue
+
+            if path.is_file():
+                loader = self.supported_loaders.get(path.suffix.lower())
+                if loader is None:
+                    err_msg = f"Unsupported file type: {path.suffix or '<no extension>'}"
+                    logger.error("%s for file: %s", err_msg, path)
+                    result.failed_count += 1
+                    result.failed_files.append(src)
+                    result.errors.append({"file": src, "error": err_msg})
+                    continue
+
+                try:
+                    loaded = loader(path, strategy=strategy)
+                    result.documents.extend(loaded)
+                    result.processed_count += 1
+                    result.processed_files.append(str(path))
+                except Exception as e:
+                    logger.error("Failed to load file %s: %s", path, e)
+                    result.failed_count += 1
+                    result.failed_files.append(str(path))
+                    result.errors.append({"file": str(path), "error": str(e)})
+                continue
+
+            if path.is_dir():
+                for file in sorted(path.rglob("*")):
+                    if not file.is_file() or file.name.startswith("~$") or not file.suffix or file.name.startswith("."):
+                        continue
+
+                    loader = self.supported_loaders.get(file.suffix.lower())
+                    if loader is None:
+                        continue
+
+                    try:
+                        loaded = loader(file, strategy=strategy)
+                        result.documents.extend(loaded)
+                        result.processed_count += 1
+                        result.processed_files.append(str(file))
+                    except Exception as e:
+                        logger.error("Failed to load file %s: %s", file, e)
+                        result.failed_count += 1
+                        result.failed_files.append(str(file))
+                        result.errors.append({"file": str(file), "error": str(e)})
+                continue
+
+            err_msg = f"Unsupported source format: {src}"
+            logger.error(err_msg)
+            result.failed_count += 1
+            result.failed_files.append(src)
+            result.errors.append({"file": src, "error": err_msg})
+
+        logger.info(
+            "Detailed ingestion complete: %d chunks, %d processed files, %d failed files.",
+            len(result.documents),
+            result.processed_count,
+            result.failed_count
+        )
+        return result
 
     def load_documents(self, sources: List[str], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
         """
-        Load documents from supported sources including
-        URLs, individual files, and directories.
+        Load documents from supported sources including URLs, individual files, and directories.
+        Preserves backward compatibility returning List[Document].
         
         Args:
             sources (List[str]): List of sources to load documents from
@@ -307,41 +371,8 @@ class DocumentProcessor:
         Returns:
             List[Document]: List of documents
         """
-        logger.info("Starting loading process for %d source(s) with strategy '%s'", len(sources), strategy)
-        docs: List[Document] = []
-
-        for src in sources:
-            logger.info("Processing source: %s", src)
-
-            if src.startswith(("http://", "https://")):
-                docs.extend(self.load_from_url(src, strategy=strategy))
-                continue
-
-            path = Path(src)
-
-            if not path.exists():
-                logger.error("Source path does not exist: %s", path)
-                raise FileNotFoundError(f"File not found: {path}")
-
-            if path.is_file():
-                loader = self.supported_loaders.get(path.suffix.lower())
-
-                if loader is None:
-                    logger.error("Unsupported file type: %s", path.suffix)
-                    raise ValueError(
-                        f"Unsupported file type: {path.suffix or '<no extension>'}"
-                    )
-
-                logger.info("Loading single file: %s", path)
-                docs.extend(loader(path, strategy=strategy))
-                continue
-
-            if path.is_dir():
-                docs.extend(self.load_from_directory(path, strategy=strategy))
-                continue
-
-            logger.error("Unsupported source format: %s", src)
-            raise ValueError(f"Unsupported source: {src}")
-        
-        logger.info("Document loading pipeline finished. Total chunks created: %d", len(docs))
-        return docs
+        detailed = self.load_documents_detailed(sources, strategy=strategy)
+        if not detailed.documents and detailed.failed_count > 0:
+            first_err = detailed.errors[0]["error"] if detailed.errors else "Unknown error loading documents."
+            raise ValueError(f"Document loading failed: {first_err}")
+        return detailed.documents

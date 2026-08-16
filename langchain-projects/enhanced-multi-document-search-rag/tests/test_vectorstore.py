@@ -158,5 +158,25 @@ class TestVectorStoreManager(unittest.TestCase):
         self.assertEqual(len(res), 1)
         self.assertEqual(res[0].metadata["session_id"], "sess_123")
 
+    def test_compute_corpus_hash_and_deduplication(self):
+        from vectorstore.vectorstore import compute_corpus_hash
+        doc1 = Document(page_content="doc 1 content", metadata={"source": "d1.txt"})
+        doc2 = Document(page_content="doc 2 content", metadata={"source": "d2.txt"})
+
+        hash1 = compute_corpus_hash([doc1, doc2])
+        hash2 = compute_corpus_hash([doc2, doc1]) # order independent
+        self.assertEqual(hash1, hash2)
+
+        self.manager.documents = [doc1]
+        with patch.object(self.manager, "_add_documents_to_vectorstore") as mock_add, \
+             patch.object(self.manager, "_save_documents_to_cache") as mock_save:
+            mock_add.return_value = self.manager.vectorstore
+
+            # Adding duplicate doc1 + new doc2 -> only doc2 should be added to in-memory documents
+            self.manager.create_vectorstore([doc1, doc2])
+            self.assertEqual(len(self.manager.documents), 2)
+            self.assertEqual(self.manager.documents[1].page_content, "doc 2 content")
+
+
 if __name__ == "__main__":
     unittest.main()

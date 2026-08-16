@@ -114,7 +114,15 @@ class GraphBuilder:
         )
 
         builder.add_edge("external_search", "answer_generator")
-        builder.add_edge("output_answer_security_check", END)
+
+        builder.add_conditional_edges(
+            "output_answer_security_check",
+            self.nodes.output_answer_security_router,
+            {
+                "hallucination_detector": "hallucination_detector",
+                "end": END,
+            },
+        )
 
         # Compile the graph
         if use_checkpointer and self.checkpointer:
@@ -148,7 +156,7 @@ class GraphBuilder:
             retriever: Optional per-query retriever to avoid mutating shared graph state
 
         Returns:
-            Dictionary with answer and other details
+            Dictionary with structured result containing success, answer, error, error_type, and other details
         """
         if self.graph is None:
             logger.info(
@@ -158,15 +166,20 @@ class GraphBuilder:
 
         resolved_thread_id = thread_id or "default_session"
 
+        # Sanitize PII before creating state so the sanitized value is used throughout the graph
+        from nodes.guardrails import sanitize_pii
+        sanitized_question = sanitize_pii(question)
+
         logger.info(
             "Running Adaptive RAG workflow for query: %s (thread_id: %s, history_messages: %d)",
-            repr(question),
+            repr(sanitized_question),
             resolved_thread_id,
             len(messages) if messages else 0
         )
 
         initial_state = AdaptiveRAGState(
-            question=question,
+            question=sanitized_question,
+            original_question=sanitized_question,
             messages=messages or []
         )
         cost_callback = CostTrackingCallbackHandler()
@@ -189,8 +202,11 @@ class GraphBuilder:
 
             total_elapsed = round(time.perf_counter() - start_time, 4)
 
-            # Update the result state with total latency and cost
+            # Update the result state with total latency, cost, and structured success
             if isinstance(result, dict):
+                result["success"] = True
+                result["error"] = None
+                result["error_type"] = None
                 result["total_cost"] = cost_callback.total_cost
                 result["total_latency"] = total_elapsed
                 breakdown = result.get("latency_breakdown", {})
@@ -198,6 +214,9 @@ class GraphBuilder:
                 result["latency_breakdown"] = breakdown
             elif hasattr(result, "total_cost"):
                 try:
+                    result.success = True
+                    result.error = None
+                    result.error_type = None
                     result.total_cost = cost_callback.total_cost
                     result.total_latency = total_elapsed
                     result.latency_breakdown["total"] = total_elapsed
@@ -215,8 +234,11 @@ class GraphBuilder:
             logger.error("Error during Adaptive RAG workflow execution: %s", str(e), exc_info=True)
             total_elapsed = round(time.perf_counter() - start_time, 4)
             return {
+                "success": False,
                 "question": question,
                 "answer": "⚠️ An error occurred while processing your request. Please try again or rephrase your query.",
+                "error": str(e),
+                "error_type": type(e).__name__,
                 "retrieved_docs": [],
                 "external_citations": [],
                 "total_cost": cost_callback.total_cost,

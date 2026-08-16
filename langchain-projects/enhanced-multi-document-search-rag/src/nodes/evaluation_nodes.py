@@ -60,7 +60,7 @@ class EvaluationNodes:
         
         state.retrieval_score = score
         state.retrieval_grade = "yes" if passed else "no"
-        state.retrieval_reasoning = response.reasoning
+        state.retrieval_evaluation = response.reasoning
         state.analysis = response.reasoning
         elapsed = time.perf_counter() - t0
         state.grader_latency = round(state.grader_latency + elapsed, 4)
@@ -73,7 +73,7 @@ class EvaluationNodes:
             state.retrieval_grade,
             Config.RETRIEVAL_GRADE_PASS_THRESHOLD
         )
-        logger.debug("Retrieval grader reasoning: %s", state.analysis)
+        logger.debug("Retrieval grader evaluation: %s", state.analysis)
         return state
 
     async def hallucination_detector(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
@@ -119,7 +119,7 @@ class EvaluationNodes:
 
         state.hallucination_score = score
         state.hallucination_grade = "yes" if passed else "no"
-        state.grounding_reasoning = response.reasoning
+        state.grounding_evaluation = response.reasoning
         state.analysis = response.reasoning
         elapsed = time.perf_counter() - t0
         state.grader_latency = round(state.grader_latency + elapsed, 4)
@@ -132,7 +132,7 @@ class EvaluationNodes:
             state.hallucination_grade,
             Config.HALLUCINATION_GRADE_PASS_THRESHOLD
         )
-        logger.debug("Hallucination check reasoning: %s", state.analysis)
+        logger.debug("Hallucination check evaluation: %s", state.analysis)
         return state
 
     async def answer_relevance_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
@@ -163,7 +163,7 @@ class EvaluationNodes:
 
         state.answer_relevance_score = score
         state.answer_relevance_grade = "yes" if passed else "no"
-        state.relevance_reasoning = response.reasoning
+        state.relevance_evaluation = response.reasoning
         state.analysis = response.reasoning
         elapsed = time.perf_counter() - t0
         state.grader_latency = round(state.grader_latency + elapsed, 4)

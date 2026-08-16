@@ -2,10 +2,10 @@
 
 This module coordinates:
 - AstraDB vector embeddings via LiteLLM Gateway
-- BM25 lexical retriever hydration and disk caching
+- BM25 lexical retriever hydration and disk caching with corpus hash validation
 - Reciprocal Rank Fusion via LangChain EnsembleRetriever
 - Semantic document compression and reranking via Cohere Rerank
-- 5-dimension deterministic chunk hashing for zero-duplicate ingestion
+- Deterministic composite chunk identity based on document and chunk metadata for zero-duplicate ingestion
 """
 
 import os
@@ -33,12 +33,14 @@ BM25_LEGACY_PKL_PATH = CACHE_DIR / "bm25_corpus.pkl"
 
 def compute_chunk_identity(doc: Document, default_embedding_model: str = Config.EMBEDDING_MODEL) -> str:
     """
-    Compute a strong, deterministic chunk identity hash based on:
+    Compute a deterministic composite chunk identity based on document and chunk metadata:
     1. Source document path or URL
     2. Document version (default 'v1')
-    3. Exact chunk text content
-    4. Chunking configuration (strategy, size, overlap, chunk index)
+    3. Chunking strategy (recursive, semantic, hybrid, etc.)
+    4. Chunk size and overlap
     5. Embedding model name
+    6. Chunk index
+    7. Exact chunk text content
     """
     meta = getattr(doc, "metadata", {}) or {}
     source = meta.get("source", "")
@@ -57,6 +59,14 @@ def compute_chunk_identity(doc: Document, default_embedding_model: str = Config.
     return hashlib.sha256(identity_string.encode("utf-8")).hexdigest()
 
 
+def compute_corpus_hash(docs: List[Document]) -> str:
+    """Compute a deterministic hash for a collection of documents based on chunk identities."""
+    if not docs:
+        return hashlib.sha256(b"").hexdigest()
+    chunk_ids = sorted([compute_chunk_identity(d) for d in docs])
+    return hashlib.sha256("|".join(chunk_ids).encode("utf-8")).hexdigest()
+
+
 class VectorStoreManager:
     """Manages AstraDB vector stores with LiteLLM Gateway embeddings and persistent Hybrid Retrieval."""
 
@@ -68,13 +78,15 @@ class VectorStoreManager:
             embedding=self.embeddings,
             collection_name=Config.ASTRA_DB_COLLECTION_NAME,
             token=Config.ASTRA_DB_API_KEY,
-            api_endpoint=Config.ASTRA_DB_API_ENDPOINT
+            api_endpoint=Config.ASTRA_DB_API_ENDPOINT,
+            embedding_dimension=Config.OUTPUT_DIMENSION,
         )
         self.bm25_retriever: Optional[BM25Retriever] = None
         self.ensemble_retriever: Optional[EnsembleRetriever] = None
         self.compression_retriever: Optional[ContextualCompressionRetriever] = None
         self.retriever = None
         self.documents: List[Document] = []
+        self._cached_corpus_hash: Optional[str] = None
         self._current_k: Optional[int] = None
         self._current_search_type: Optional[str] = None
         self.cohere_reranker = CohereRerank(
@@ -86,16 +98,22 @@ class VectorStoreManager:
         self._hydrate_documents()
 
     def _save_documents_to_cache(self):
-        """Persist document corpus to local JSON disk cache for secure, fast reload."""
+        """Persist document corpus and deterministic corpus hash to local JSON disk cache."""
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
             serializable_docs = [
                 {"page_content": doc.page_content, "metadata": getattr(doc, "metadata", {})}
                 for doc in self.documents
             ]
+            corpus_hash = compute_corpus_hash(self.documents)
+            self._cached_corpus_hash = corpus_hash
+            payload = {
+                "corpus_hash": corpus_hash,
+                "documents": serializable_docs,
+            }
             with open(BM25_CACHE_PATH, "w", encoding="utf-8") as f:
-                json.dump(serializable_docs, f, ensure_ascii=False)
-            logger.info("Saved %d documents to BM25 JSON cache at %s", len(self.documents), BM25_CACHE_PATH)
+                json.dump(payload, f, ensure_ascii=False)
+            logger.info("Saved %d documents to BM25 JSON cache at %s (hash: %s)", len(self.documents), BM25_CACHE_PATH, corpus_hash[:8])
         except Exception as e:
             logger.warning("Could not save BM25 corpus cache: %s", e)
 
@@ -105,13 +123,26 @@ class VectorStoreManager:
             try:
                 with open(BM25_CACHE_PATH, "r", encoding="utf-8") as f:
                     cached_data = json.load(f)
-                if isinstance(cached_data, list) and cached_data:
+                if isinstance(cached_data, dict):
+                    docs_raw = cached_data.get("documents", [])
+                    self._cached_corpus_hash = cached_data.get("corpus_hash")
+                    if isinstance(docs_raw, list) and docs_raw:
+                        self.documents = [
+                            Document(page_content=item.get("page_content", ""), metadata=item.get("metadata", {}))
+                            for item in docs_raw
+                            if isinstance(item, dict)
+                        ]
+                        logger.info("Loaded %d documents from local BM25 JSON cache (hash: %s).", len(self.documents), (self._cached_corpus_hash or "")[:8])
+                        return True
+                elif isinstance(cached_data, list) and cached_data:
                     self.documents = [
                         Document(page_content=item.get("page_content", ""), metadata=item.get("metadata", {}))
                         for item in cached_data
                         if isinstance(item, dict)
                     ]
-                    logger.info("Loaded %d documents from local BM25 JSON cache.", len(self.documents))
+                    self._cached_corpus_hash = compute_corpus_hash(self.documents)
+                    logger.info("Loaded %d documents from legacy format BM25 JSON cache.", len(self.documents))
+                    self._save_documents_to_cache()
                     return True
             except Exception as e:
                 logger.warning("Failed to load BM25 JSON corpus cache: %s", e)
@@ -123,6 +154,7 @@ class VectorStoreManager:
                     cached_docs = pickle.load(f)
                 if isinstance(cached_docs, list) and cached_docs:
                     self.documents = cached_docs
+                    self._cached_corpus_hash = compute_corpus_hash(self.documents)
                     logger.info("Loaded %d documents from legacy BM25 pkl cache. Migrating to JSON...", len(self.documents))
                     self._save_documents_to_cache()
                     return True
@@ -132,7 +164,7 @@ class VectorStoreManager:
         return False
 
     def _load_documents_from_astradb(self):
-        """Fetch indexed document content from AstraDB to hydrate BM25 on cold starts."""
+        """Fetch indexed document content from AstraDB to hydrate or rebuild BM25 cache."""
         try:
             if not self.vectorstore or not hasattr(self.vectorstore, "astra_env"):
                 return
@@ -140,7 +172,7 @@ class VectorStoreManager:
             if collection is None:
                 return
 
-            logger.info("Hydrating BM25 corpus from AstraDB collection '%s'...", Config.ASTRA_DB_COLLECTION_NAME)
+            logger.info("Fetching corpus from AstraDB collection '%s' to verify BM25 cache...", Config.ASTRA_DB_COLLECTION_NAME)
             cursor = collection.find(projection={"content": True, "metadata": True})
             loaded_docs = []
             for record in cursor:
@@ -150,9 +182,14 @@ class VectorStoreManager:
                     loaded_docs.append(Document(page_content=content, metadata=metadata))
 
             if loaded_docs:
-                self.documents = loaded_docs
-                logger.info("Successfully hydrated %d documents from AstraDB for BM25.", len(self.documents))
-                self._save_documents_to_cache()
+                astradb_hash = compute_corpus_hash(loaded_docs)
+                if astradb_hash != self._cached_corpus_hash or not self.documents:
+                    logger.info("AstraDB corpus hash differs from cache (%s vs %s). Rebuilding BM25 corpus...", astradb_hash[:8], (self._cached_corpus_hash or "none")[:8])
+                    self.documents = loaded_docs
+                    self._cached_corpus_hash = astradb_hash
+                    self._save_documents_to_cache()
+                else:
+                    logger.info("BM25 cache is up-to-date with AstraDB corpus hash (%s).", astradb_hash[:8])
             else:
                 logger.info("No existing documents found in AstraDB collection.")
         except Exception as e:
@@ -160,12 +197,13 @@ class VectorStoreManager:
 
     def _hydrate_documents(self):
         """Initialize document corpus for BM25 from disk cache or AstraDB."""
-        if not self._load_documents_from_cache():
+        cache_loaded = self._load_documents_from_cache()
+        if not cache_loaded:
             self._load_documents_from_astradb()
 
     def _add_documents_to_vectorstore(self, split_docs: List[Document], vector_store: AstraDBVectorStore) -> AstraDBVectorStore:
         """
-        Embeds documents and prevents duplicates using deterministic hashing IDs.
+        Embeds documents and prevents duplicates using deterministic composite chunk identity hashing.
         Args:
             split_docs: List[Document]: List of documents to embed
             vector_store: AstraDBVectorStore: AstraDB vector store
@@ -216,7 +254,8 @@ class VectorStoreManager:
 
     def create_vectorstore(self, documents: List[Document]) -> AstraDBVectorStore:
         """
-        Create or update AstraDB vector store from documents
+        Create or update AstraDB vector store and in-memory BM25 corpus from documents.
+        Deduplicates against existing in-memory chunk IDs before updating BM25 corpus.
         Args:
             documents (List[Document]): List of documents to add
         Returns:
@@ -225,8 +264,22 @@ class VectorStoreManager:
         if self.vectorstore is not None and len(documents) > 0:
             with self._lock:
                 logger.info("Adding %d documents to AstraDB vector store...", len(documents))
-                self.documents.extend(documents)
-                self._save_documents_to_cache()
+
+                # Deduplicate before adding to in-memory BM25 corpus
+                existing_bm25_ids = {compute_chunk_identity(d) for d in self.documents}
+                new_bm25_docs = []
+                for doc in documents:
+                    doc_id = compute_chunk_identity(doc)
+                    if doc_id not in existing_bm25_ids:
+                        existing_bm25_ids.add(doc_id)
+                        new_bm25_docs.append(doc)
+
+                if new_bm25_docs:
+                    self.documents.extend(new_bm25_docs)
+                    self._save_documents_to_cache()
+                    logger.info("Added %d new unique chunks to BM25 corpus (skipped %d duplicates).", len(new_bm25_docs), len(documents) - len(new_bm25_docs))
+                else:
+                    logger.info("All %d chunks already exist in BM25 corpus; skipping in-memory BM25 extension.", len(documents))
 
                 # Invalidate cached retriever so it is rebuilt with new corpus
                 self.bm25_retriever = None

@@ -37,31 +37,64 @@ class AdaptiveRAGState(BaseModel):
         description="General analysis or explanation for backward compatibility."
     )
 
-    # Granular reasoning fields for LangSmith traces and stage-by-stage observability
+    # Granular evaluation and explanation fields for LangSmith traces and stage-by-stage observability
     query_analysis: str = Field(
         default="",
         description="Reasoning behind query routing and tool selection."
     )
 
-    retrieval_reasoning: str = Field(
+    retrieval_evaluation: str = Field(
         default="",
-        description="Reasoning behind retrieved document relevance evaluation."
+        description="Evaluation of retrieved document relevance and context sufficiency."
     )
 
-    rewrite_reasoning: str = Field(
+    rewrite_explanation: str = Field(
         default="",
-        description="Reasoning behind query rewriting and coreference resolution."
+        description="Explanation of query rewriting and coreference resolution."
     )
 
-    grounding_reasoning: str = Field(
+    grounding_evaluation: str = Field(
         default="",
-        description="Reasoning behind factual groundedness and hallucination detection."
+        description="Evaluation of factual groundedness and hallucination detection."
     )
 
-    relevance_reasoning: str = Field(
+    relevance_evaluation: str = Field(
         default="",
-        description="Reasoning behind final answer relevance evaluation."
+        description="Evaluation of final answer relevance to the user question."
     )
+
+    # Backward compatibility properties for legacy field names
+    @property
+    def retrieval_reasoning(self) -> str:
+        return self.retrieval_evaluation
+
+    @retrieval_reasoning.setter
+    def retrieval_reasoning(self, val: str):
+        self.retrieval_evaluation = val
+
+    @property
+    def rewrite_reasoning(self) -> str:
+        return self.rewrite_explanation
+
+    @rewrite_reasoning.setter
+    def rewrite_reasoning(self, val: str):
+        self.rewrite_explanation = val
+
+    @property
+    def grounding_reasoning(self) -> str:
+        return self.grounding_evaluation
+
+    @grounding_reasoning.setter
+    def grounding_reasoning(self, val: str):
+        self.grounding_evaluation = val
+
+    @property
+    def relevance_reasoning(self) -> str:
+        return self.relevance_evaluation
+
+    @relevance_reasoning.setter
+    def relevance_reasoning(self, val: str):
+        self.relevance_evaluation = val
 
     tool_type: Literal["hybrid_retrieval", "vector_search", "external_search"] | None = Field(
         default=None,
@@ -121,6 +154,16 @@ class AdaptiveRAGState(BaseModel):
     generate_count: int = Field(
         default=0,
         description="Number of times the answer has been generated."
+    )
+
+    output_modified: bool = Field(
+        default=False,
+        description="Whether the output guardrail modified/rewrote the answer."
+    )
+
+    guardrail_recheck_count: int = Field(
+        default=0,
+        description="Number of times the output guardrail rewrite was sent for re-evaluation."
     )
 
     query_blocked: bool = Field(

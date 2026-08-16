@@ -12,6 +12,7 @@ from nodes.routing import (
     grader_router,
     hallucination_router,
     answer_relevance_router,
+    output_answer_security_router,
 )
 
 
@@ -77,6 +78,18 @@ class TestRouting(unittest.TestCase):
         state_irrel_max = AdaptiveRAGState(question="q", answer_relevance_grade="no", rewrite_count=Config.MAX_REWRITES)
         self.assertEqual(answer_relevance_router(state_irrel_max), "external_search")
 
+    def test_output_answer_security_router(self):
+        # When output guardrail did not modify answer: routes to end
+        state_unmodified = AdaptiveRAGState(question="q", answer="Clean", output_modified=False)
+        self.assertEqual(output_answer_security_router(state_unmodified), "end")
+
+        # When output guardrail modified answer: routes back to hallucination_detector
+        state_modified = AdaptiveRAGState(question="q", answer="Sanitized", output_modified=True, guardrail_recheck_count=1)
+        self.assertEqual(output_answer_security_router(state_modified), "hallucination_detector")
+
+        # When guardrail recheck limit is exceeded: routes to end
+        state_max_rechecks = AdaptiveRAGState(question="q", answer="Sanitized", output_modified=True, guardrail_recheck_count=2)
+        self.assertEqual(output_answer_security_router(state_max_rechecks), "end")
 
     def test_grader_router_score_authoritative(self):
         # Even if grade is 'yes', a low score (< 0.7) must fail

@@ -133,8 +133,11 @@ class QueryRequest(BaseModel):
 
 
 class QueryResponse(BaseModel):
+    success: bool = Field(default=True, description="Whether the query was processed successfully.")
     question: str
     answer: str
+    error: Optional[str] = Field(default=None, description="Error message if workflow failed.")
+    error_type: Optional[str] = Field(default=None, description="Exception class name if workflow failed.")
     latency_seconds: float
     total_cost: float
     retrieved_docs: List[Dict[str, Any]] = []
@@ -152,6 +155,10 @@ class IngestResponse(BaseModel):
     message: str
     chunks_indexed: int
     sources: List[str]
+    processed_count: int = Field(default=0, description="Count of successfully processed files/URLs.")
+    failed_count: int = Field(default=0, description="Count of failed files/URLs.")
+    failed_files: List[str] = Field(default_factory=list, description="List of failed files/URLs.")
+    error_details: List[Dict[str, str]] = Field(default_factory=list, description="Structured error details for failed files.")
 
 
 class HealthResponse(BaseModel):
@@ -234,8 +241,11 @@ async def query_rag(request: QueryRequest):
                 formatted_docs.append(doc)
 
         return QueryResponse(
+            success=result.get("success", True),
             question=request.question,
             answer=result.get("answer", "No answer generated."),
+            error=result.get("error"),
+            error_type=result.get("error_type"),
             latency_seconds=round(latency, 3),
             total_cost=result.get("total_cost", 0.0),
             retrieved_docs=formatted_docs,
@@ -280,12 +290,14 @@ async def ingest_urls(request: IngestUrlRequest):
         }
         chunk_strategy = strategy_map.get((request.strategy or "recursive").lower(), ChunkStrategy.RECURSIVE)
         
-        # Load & chunk
-        docs = doc_processor.process_urls(request.urls, strategy=chunk_strategy)
+        # Load & chunk with structured tracking
+        detailed_result = doc_processor.load_documents_detailed(request.urls, strategy=chunk_strategy)
+        docs = detailed_result.documents
         if not docs:
+            first_err = detailed_result.errors[0]["error"] if detailed_result.errors else "No content could be extracted."
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No content could be extracted from the provided URLs."
+                detail=f"No content could be extracted from the provided URLs. Details: {first_err}"
             )
 
         if request.session_id:
@@ -298,7 +310,11 @@ async def ingest_urls(request: IngestUrlRequest):
         return IngestResponse(
             message="URLs ingested successfully.",
             chunks_indexed=chunks_count,
-            sources=request.urls
+            sources=request.urls,
+            processed_count=detailed_result.processed_count,
+            failed_count=detailed_result.failed_count,
+            failed_files=detailed_result.failed_files,
+            error_details=detailed_result.errors
         )
     except HTTPException:
         raise
@@ -351,8 +367,16 @@ async def ingest_file(
         }
         chunk_strategy = strategy_map.get(strategy.lower(), ChunkStrategy.RECURSIVE)
 
-        # Process document
-        docs = doc_processor.load_documents([temp_path], strategy=chunk_strategy)
+        # Process document with detailed reporting
+        detailed_result = doc_processor.load_documents_detailed([temp_path], strategy=chunk_strategy)
+        docs = detailed_result.documents
+        if not docs:
+            first_err = detailed_result.errors[0]["error"] if detailed_result.errors else "No text extracted from file."
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Failed to process file '{file.filename}': {first_err}"
+            )
+
         for doc in docs:
             doc.metadata["source"] = file.filename
             if session_id:
@@ -364,7 +388,11 @@ async def ingest_file(
         return IngestResponse(
             message=f"File '{file.filename}' ingested successfully.",
             chunks_indexed=chunks_count,
-            sources=[file.filename]
+            sources=[file.filename],
+            processed_count=1,
+            failed_count=0,
+            failed_files=[],
+            error_details=[]
         )
     except HTTPException:
         raise

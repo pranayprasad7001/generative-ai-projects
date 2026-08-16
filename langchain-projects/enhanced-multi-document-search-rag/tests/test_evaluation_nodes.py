@@ -26,6 +26,7 @@ class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.documents_grader(state)
         self.assertEqual(updated_state.retrieval_grade, "yes")
         self.assertEqual(updated_state.retrieval_score, 0.88)
+        self.assertEqual(updated_state.retrieval_evaluation, "Highly relevant")
         self.assertEqual(updated_state.retrieval_reasoning, "Highly relevant")
         self.assertEqual(updated_state.analysis, "Highly relevant")
 
@@ -38,6 +39,7 @@ class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.documents_grader(state)
         self.assertEqual(updated_state.retrieval_grade, "no")
         self.assertEqual(updated_state.retrieval_score, 0.35)
+        self.assertEqual(updated_state.retrieval_evaluation, "Irrelevant docs")
         self.assertEqual(updated_state.retrieval_reasoning, "Irrelevant docs")
 
     async def test_hallucination_detector_rich_grounded(self):
@@ -49,6 +51,7 @@ class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.hallucination_detector(state)
         self.assertEqual(updated_state.hallucination_grade, "yes")
         self.assertEqual(updated_state.hallucination_score, 0.95)
+        self.assertEqual(updated_state.grounding_evaluation, "Fully grounded")
         self.assertEqual(updated_state.grounding_reasoning, "Fully grounded")
 
     async def test_hallucination_detector_rich_hallucinated(self):
@@ -60,6 +63,7 @@ class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.hallucination_detector(state)
         self.assertEqual(updated_state.hallucination_grade, "no")
         self.assertEqual(updated_state.hallucination_score, 0.40)
+        self.assertEqual(updated_state.grounding_evaluation, "Hallucinated stats")
         self.assertEqual(updated_state.grounding_reasoning, "Hallucinated stats")
 
     async def test_answer_relevance_grader_rich(self):
@@ -71,6 +75,7 @@ class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.answer_relevance_grader(state)
         self.assertEqual(updated_state.answer_relevance_grade, "yes")
         self.assertEqual(updated_state.answer_relevance_score, 0.92)
+        self.assertEqual(updated_state.relevance_evaluation, "Directly relevant")
         self.assertEqual(updated_state.relevance_reasoning, "Directly relevant")
 
 

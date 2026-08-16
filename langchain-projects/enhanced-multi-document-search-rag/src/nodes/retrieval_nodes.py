@@ -251,7 +251,7 @@ class RetrievalNodes:
         )
 
         state.question = response.rewritten_question
-        state.rewrite_reasoning = response.reasoning
+        state.rewrite_explanation = response.reasoning
         state.analysis = response.reasoning
         state.rewrite_count += 1
         state.generate_count = 0
