@@ -19,8 +19,10 @@ Evaluates:
 
 import os
 import sys
+import re
 import time
 import json
+import hashlib
 import asyncio
 import logging
 import argparse
@@ -367,6 +369,7 @@ class RAGEvaluator:
         }
 
     # =====================================================================
+    # =====================================================================
     # LangSmith Dataset Creation & Evaluation Methods
     # =====================================================================
     def create_or_sync_langsmith_dataset(
@@ -375,8 +378,9 @@ class RAGEvaluator:
         limit: Optional[int] = None
     ) -> Any:
         """
-        Creates or retrieves the LangSmith dataset and populates examples from the CSV.
+        Creates or retrieves the LangSmith dataset and synchronizes examples using deterministic hashing.
         """
+        import hashlib
         client = self.get_langsmith_client()
         df = self.load_dataset(limit=limit)
 
@@ -391,27 +395,46 @@ class RAGEvaluator:
                 description="Golden evaluation dataset for Air Pollution RAG benchmark"
             )
 
-        # Format examples
-        examples = [
-            {
-                "inputs": {"question": str(row["question"]).strip()},
-                "outputs": {"ground_truth": str(row["ground_truth"]).strip()},
+        # Build example dicts with deterministic hash key
+        examples_to_sync = []
+        for idx, row in df.iterrows():
+            q = str(row["question"]).strip()
+            gt = str(row["ground_truth"]).strip()
+            item_hash = hashlib.sha256(f"{q}||{gt}".encode("utf-8")).hexdigest()
+            examples_to_sync.append({
+                "inputs": {"question": q},
+                "outputs": {"ground_truth": gt},
                 "metadata": {
                     "source": "rag_evaluation_dataset_air_pollution.csv",
-                    "sample_index": int(idx)
+                    "sample_index": int(idx),
+                    "content_hash": item_hash
                 }
-            }
-            for idx, row in df.iterrows()
+            })
+
+        # Fetch existing examples and compare by deterministic key
+        existing_examples = list(client.list_examples(dataset_id=dataset.id))
+        existing_hashes = set()
+        for ex in existing_examples:
+            meta = getattr(ex, "metadata", {}) or {}
+            h = meta.get("content_hash")
+            if not h:
+                # Recompute hash from existing example content if not stored
+                ex_q = ex.inputs.get("question", "").strip() if hasattr(ex, "inputs") and isinstance(ex.inputs, dict) else ""
+                ex_gt = ex.outputs.get("ground_truth", "").strip() if hasattr(ex, "outputs") and isinstance(ex.outputs, dict) else ""
+                h = hashlib.sha256(f"{ex_q}||{ex_gt}".encode("utf-8")).hexdigest()
+            existing_hashes.add(h)
+
+        new_examples = [
+            ex for ex in examples_to_sync
+            if ex["metadata"]["content_hash"] not in existing_hashes
         ]
 
-        # Check existing examples count before creating
-        existing_examples = list(client.list_examples(dataset_id=dataset.id))
-        if len(existing_examples) < len(examples):
-            logger.info("Uploading %d examples to LangSmith dataset '%s'...", len(examples), dataset_name)
-            client.create_examples(dataset_id=dataset.id, examples=examples)
-            logger.info("✅ Uploaded %d examples to LangSmith.", len(examples))
+        if new_examples:
+            logger.info("Syncing %d new/modified examples to LangSmith dataset '%s'...", len(new_examples), dataset_name)
+            client.create_examples(dataset_id=dataset.id, examples=new_examples)
+            logger.info("✅ Successfully synced %d examples to LangSmith.", len(new_examples))
         else:
-            logger.info("Dataset already contains %d examples. Skipping re-upload.", len(existing_examples))
+            logger.info("All %d examples are up-to-date in LangSmith. Skipping upload.", len(examples_to_sync))
 
         return dataset
 
@@ -442,6 +465,10 @@ class RAGEvaluator:
                 "answer": res.get("answer", ""),
                 "context": context_text,
                 "retrieved_chunks_count": len(retrieved_docs),
+                "retrieved_docs": [
+                    {"content": doc.page_content, "metadata": getattr(doc, "metadata", {})}
+                    for doc in retrieved_docs
+                ],
                 "tool_type": res.get("tool_type", "unknown"),
                 "total_cost": res.get("total_cost", 0.0),
                 "retrieval_grade": res.get("retrieval_grade"),
@@ -503,14 +530,38 @@ class RAGEvaluator:
             except Exception as e:
                 return {"key": "relevance", "score": 0.0, "comment": f"Error: {e}"}
 
-        async def retrieval_relevance_evaluator(run, example) -> dict:
-            retrieval_grade = run.outputs.get("retrieval_grade")
-            num_chunks = run.outputs.get("retrieved_chunks_count", 0)
-            score = 1.0 if retrieval_grade == "yes" and num_chunks > 0 else 0.0
+        async def independent_retrieval_evaluator(run, example) -> dict:
+            """
+            Independent Retrieval Evaluator calculating Hit@K, Keyword Recall@K, and MRR
+            against ground truth reference text without relying on internal grader state.
+            """
+            ground_truth = str(example.outputs.get("ground_truth", "")).lower()
+            retrieved_docs = run.outputs.get("retrieved_docs", [])
+            
+            if not retrieved_docs or not ground_truth:
+                return {"key": "independent_retrieval_hit", "score": 0.0, "comment": "No docs retrieved or empty ground truth."}
+
+            gt_words = [w for w in re.findall(r'\b\w{4,}\b', ground_truth) if w not in {'that', 'with', 'from', 'this', 'have', 'were', 'which'}]
+            if not gt_words:
+                gt_words = [w for w in ground_truth.split() if len(w) > 2]
+
+            hits = []
+            reciprocal_rank = 0.0
+
+            for rank, doc in enumerate(retrieved_docs, start=1):
+                doc_text = (doc.get("content", "") if isinstance(doc, dict) else getattr(doc, "page_content", "")).lower()
+                matching_words = sum(1 for w in gt_words if w in doc_text)
+                overlap_ratio = matching_words / max(len(gt_words), 1)
+                is_hit = overlap_ratio >= 0.35
+                hits.append(is_hit)
+                if is_hit and reciprocal_rank == 0.0:
+                    reciprocal_rank = 1.0 / rank
+
+            hit_at_k = 1.0 if any(hits) else 0.0
             return {
-                "key": "retrieval_relevance",
-                "score": score,
-                "comment": f"Internal retrieval grade: {retrieval_grade}, Chunks: {num_chunks}"
+                "key": "retrieval_mrr",
+                "score": round(reciprocal_rank, 4),
+                "comment": f"Hit@K: {hit_at_k}, MRR: {reciprocal_rank:.3f}, Chunks: {len(retrieved_docs)}"
             }
 
         eval_metadata = metadata or {
@@ -533,7 +584,7 @@ class RAGEvaluator:
                 correctness_evaluator,
                 groundedness_evaluator,
                 relevance_evaluator,
-                retrieval_relevance_evaluator
+                independent_retrieval_evaluator
             ],
             experiment_prefix=experiment_prefix,
             metadata=eval_metadata,

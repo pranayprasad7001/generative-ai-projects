@@ -79,14 +79,18 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configurable CORS
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+# Configurable CORS with secure restrictive defaults
+allowed_origins_env = os.getenv(
+    "ALLOWED_ORIGINS",
+    "http://localhost:8501,http://localhost:3000,http://127.0.0.1:8501,http://127.0.0.1:3000"
+)
 allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+is_wildcard = allowed_origins == ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins if allowed_origins else ["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=not is_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )
