@@ -17,7 +17,8 @@ from typing import List, Optional, Dict, Any, Union
 from contextlib import asynccontextmanager
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, status
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Security, Depends, status
+from fastapi.security.api_key import APIKeyHeader, APIKeyQuery
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, AIMessage
@@ -28,7 +29,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 from config.llmgateway_config import Config
 from vectorstore.vectorstore import VectorStoreManager
 from graph_builder.adaptive_graph_builder import GraphBuilder
-from document_ingestion.document_processor import DocumentProcessor
+from document_ingestion.document_processor import DocumentProcessor, validate_safe_url
 from document_ingestion.chunker import ChunkStrategy
 
 # Setup logging
@@ -37,6 +38,23 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 )
 logger = logging.getLogger("rag_api")
+
+# Configuration for API Security
+API_SECRET_KEY = os.getenv("API_SECRET_KEY")
+MAX_FILE_SIZE_BYTES = int(os.getenv("MAX_FILE_SIZE_MB", "50")) * 1024 * 1024
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+async def verify_api_key(api_key: Optional[str] = Security(api_key_header)):
+    """Enforce API key verification if API_SECRET_KEY is configured in the environment."""
+    if not API_SECRET_KEY:
+        return True
+    if not api_key or api_key.strip() != API_SECRET_KEY.strip():
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key."
+        )
+    return True
 
 # Global instances (initialized during startup)
 vector_store_manager: Optional[VectorStoreManager] = None
@@ -167,7 +185,7 @@ async def health_check():
     )
 
 
-@app.post("/api/v1/query", response_model=QueryResponse, tags=["RAG"])
+@app.post("/api/v1/query", response_model=QueryResponse, dependencies=[Depends(verify_api_key)], tags=["RAG"])
 async def query_rag(request: QueryRequest):
     """Execute the Adaptive LangGraph RAG pipeline on a given question."""
     if not rag_system or not vector_store_manager:
@@ -235,7 +253,7 @@ async def query_rag(request: QueryRequest):
         )
 
 
-@app.post("/api/v1/ingest/url", response_model=IngestResponse, tags=["Ingestion"])
+@app.post("/api/v1/ingest/url", response_model=IngestResponse, dependencies=[Depends(verify_api_key)], tags=["Ingestion"])
 async def ingest_urls(request: IngestUrlRequest):
     """Ingest web URLs, chunk them, and store them into AstraDB."""
     if not vector_store_manager or not doc_processor:
@@ -243,6 +261,16 @@ async def ingest_urls(request: IngestUrlRequest):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Document processor or VectorStore is not initialized."
         )
+
+    # Validate URLs for SSRF protection
+    for url in request.urls:
+        try:
+            validate_safe_url(url, allow_local=False)
+        except ValueError as val_err:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"URL validation error for '{url}': {str(val_err)}"
+            )
 
     try:
         strategy_map = {
@@ -282,7 +310,7 @@ async def ingest_urls(request: IngestUrlRequest):
         )
 
 
-@app.post("/api/v1/ingest/file", response_model=IngestResponse, tags=["Ingestion"])
+@app.post("/api/v1/ingest/file", response_model=IngestResponse, dependencies=[Depends(verify_api_key)], tags=["Ingestion"])
 async def ingest_file(
     file: UploadFile = File(...),
     strategy: str = Form("recursive"),
@@ -304,9 +332,16 @@ async def ingest_file(
                 detail=f"Unsupported file type: '{file_ext}'. Supported: {list(doc_processor.supported_loaders.keys())}"
             )
 
+        contents = await file.read()
+        if len(contents) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail=f"File exceeds maximum allowed size limit of {MAX_FILE_SIZE_BYTES // (1024 * 1024)}MB."
+            )
+
         # Save to temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp:
-            tmp.write(await file.read())
+            tmp.write(contents)
             temp_path = tmp.name
 
         strategy_map = {

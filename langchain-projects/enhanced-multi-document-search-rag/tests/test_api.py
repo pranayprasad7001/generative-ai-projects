@@ -69,6 +69,39 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertNotIn("database password secret", data["detail"])
         self.assertIn("An error occurred while processing the query", data["detail"])
 
+    @patch("api.API_SECRET_KEY", "super-secret-test-key")
+    def test_api_key_auth_enforcement(self):
+        # 1. Missing API key should return 401
+        res = self.client.post("/api/v1/query", json={"question": "test"})
+        self.assertEqual(res.status_code, 401)
+        self.assertIn("Invalid or missing API key", res.json()["detail"])
+
+        # 2. Invalid API key should return 401
+        res = self.client.post("/api/v1/query", json={"question": "test"}, headers={"X-API-Key": "wrong-key"})
+        self.assertEqual(res.status_code, 401)
+
+    @patch("api.doc_processor")
+    @patch("api.vector_store_manager")
+    def test_ingest_url_ssrf_blocked(self, mock_vsm, mock_dp):
+        # Loopback URL
+        payload = {"urls": ["http://127.0.0.1:8000/internal"]}
+        response = self.client.post("/api/v1/ingest/url", json=payload)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("disallowed private/internal IP", response.json()["detail"])
+
+    @patch("api.doc_processor")
+    @patch("api.vector_store_manager")
+    @patch("api.MAX_FILE_SIZE_BYTES", 100)
+    def test_ingest_file_size_limit(self, mock_vsm, mock_dp):
+        mock_dp.supported_loaders = {".txt": MagicMock()}
+        file_content = b"A" * 500  # Exceeds mock 100 byte limit
+        response = self.client.post(
+            "/api/v1/ingest/file",
+            files={"file": ("test.txt", file_content, "text/plain")}
+        )
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("File exceeds maximum allowed size limit", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,8 +16,8 @@ try:
     litellm.register_model({
         "nemotron-3-ultra-550b-a55b": {
             "max_tokens": 16384,
-            "input_cost_per_token": 0.0,
-            "output_cost_per_token": 0.0,
+            "input_cost_per_token": 0.000001,
+            "output_cost_per_token": 0.000003,
             "cache_creation_input_token_cost": 0.0,
             "cache_read_input_token_cost": 0.0,
             "litellm_provider": "openai",
@@ -26,8 +26,8 @@ try:
 
         "nemotron-3-nano": {
             "max_tokens": 65536,
-            "input_cost_per_token": 0.0,
-            "output_cost_per_token": 0.0,
+            "input_cost_per_token": 0.0000001,
+            "output_cost_per_token": 0.0000003,
             "cache_creation_input_token_cost": 0.0,
             "cache_read_input_token_cost": 0.0,
             "litellm_provider": "openai",
@@ -36,8 +36,8 @@ try:
 
         "nvidia-glm-5.2": {
             "max_tokens": 16384,
-            "input_cost_per_token": 0.0,
-            "output_cost_per_token": 0.0,
+            "input_cost_per_token": 0.000001,
+            "output_cost_per_token": 0.000003,
             "cache_creation_input_token_cost": 0.0,
             "cache_read_input_token_cost": 0.0,
             "litellm_provider": "openai",

@@ -1,6 +1,7 @@
-"""Document processing module for loading and splitting documents"""
-
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import List, Union
 from .chunker import Chunker, ChunkStrategy
@@ -19,15 +20,39 @@ from langchain_community.document_loaders import (
 
 logger = logging.getLogger(__name__)
 
+
+def validate_safe_url(url: str, allow_local: bool = False) -> str:
+    """Validate URL scheme and ensure it does not resolve to private, loopback, or cloud-metadata IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Disallowed URL scheme: '{parsed.scheme}'. Only http and https are allowed.")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL must have a valid hostname.")
+
+    if not allow_local:
+        try:
+            addr_info = socket.getaddrinfo(hostname, None)
+            for item in addr_info:
+                ip_str = item[4][0]
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+                    raise ValueError(f"URL target resolves to disallowed private/internal IP: {ip_str}")
+        except socket.gaierror as e:
+            raise ValueError(f"Could not resolve hostname '{hostname}': {e}")
+    return url
+
+
 class DocumentProcessor:
     """Handles document loading and chunking"""
 
-    def __init__(self, embeddings=None, chunk_size: int=500, chunk_overlap: int=50):
+    def __init__(self, embeddings=None, chunk_size: int=500, chunk_overlap: int=50, allow_local_urls: bool = False):
         """
         Initialize DocumentProcessor
         Args:
             chunk_size (int): Size of each text chunk
             chunk_overlap (int): Overlap between consecutive chunks
+            allow_local_urls (bool): Whether to allow private/local URLs (for testing)
         """
 
         self.chunker = Chunker(
@@ -35,6 +60,7 @@ class DocumentProcessor:
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap
         )
+        self.allow_local_urls = allow_local_urls
 
         self.supported_loaders = {
             ".pdf": self.load_from_pdf,
@@ -66,6 +92,7 @@ class DocumentProcessor:
         Returns:
             List[Document]: List of cleaned documents
         """
+        validate_safe_url(url, allow_local=self.allow_local_urls)
         docs = WebBaseLoader(url).load()
         cleaned_docs = []
         for doc in docs:
@@ -148,8 +175,8 @@ class DocumentProcessor:
         if not docs:
             logger.warning("No content found in markdown file: %s", file_path)
             return []
-        docs_content = docs[0].page_content
-        base_metadata = docs[0].metadata.copy()
+        docs_content = "\n\n".join([doc.page_content for doc in docs if doc.page_content])
+        base_metadata = docs[0].metadata.copy() if docs else {}
         split_docs = self.chunker.split_documents(docs_content, ".md", strategy=strategy)
         docs_with_metadata = self.chunker.add_metadata(docs=split_docs, source=file_path, loader_name="UnstructuredMarkdownLoader", add_chunk=True, existing_metadata=base_metadata)
         logger.info("Loaded %d markdown chunks from %s", len(docs_with_metadata), file_path)

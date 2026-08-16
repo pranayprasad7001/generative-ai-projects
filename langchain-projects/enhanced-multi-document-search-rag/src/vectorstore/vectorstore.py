@@ -9,9 +9,11 @@ This module coordinates:
 """
 
 import os
+import json
 import pickle
 import logging
 import hashlib
+import threading
 from pathlib import Path
 from typing import List, Optional
 
@@ -25,7 +27,8 @@ from config.llmgateway_config import Config
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("data")
-BM25_CACHE_PATH = CACHE_DIR / "bm25_corpus.pkl"
+BM25_CACHE_PATH = CACHE_DIR / "bm25_corpus.json"
+BM25_LEGACY_PKL_PATH = CACHE_DIR / "bm25_corpus.pkl"
 
 
 def compute_chunk_identity(doc: Document, default_embedding_model: str = Config.EMBEDDING_MODEL) -> str:
@@ -59,6 +62,7 @@ class VectorStoreManager:
 
     def __init__(self):
         logger.info("Initializing VectorStoreManager with LiteLLM Gateway embeddings.")
+        self._lock = threading.Lock()
         self.embeddings = Config.get_embeddings()
         self.vectorstore = AstraDBVectorStore(
             embedding=self.embeddings,
@@ -82,27 +86,49 @@ class VectorStoreManager:
         self._hydrate_documents()
 
     def _save_documents_to_cache(self):
-        """Persist document corpus to local disk cache for instant reload."""
+        """Persist document corpus to local JSON disk cache for secure, fast reload."""
         try:
             CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            with open(BM25_CACHE_PATH, "wb") as f:
-                pickle.dump(self.documents, f)
-            logger.info("Saved %d documents to BM25 cache at %s", len(self.documents), BM25_CACHE_PATH)
+            serializable_docs = [
+                {"page_content": doc.page_content, "metadata": getattr(doc, "metadata", {})}
+                for doc in self.documents
+            ]
+            with open(BM25_CACHE_PATH, "w", encoding="utf-8") as f:
+                json.dump(serializable_docs, f, ensure_ascii=False)
+            logger.info("Saved %d documents to BM25 JSON cache at %s", len(self.documents), BM25_CACHE_PATH)
         except Exception as e:
             logger.warning("Could not save BM25 corpus cache: %s", e)
 
     def _load_documents_from_cache(self) -> bool:
-        """Load document corpus from local disk cache."""
+        """Load document corpus from local JSON cache (or legacy pkl)."""
         if BM25_CACHE_PATH.exists():
             try:
-                with open(BM25_CACHE_PATH, "rb") as f:
+                with open(BM25_CACHE_PATH, "r", encoding="utf-8") as f:
+                    cached_data = json.load(f)
+                if isinstance(cached_data, list) and cached_data:
+                    self.documents = [
+                        Document(page_content=item.get("page_content", ""), metadata=item.get("metadata", {}))
+                        for item in cached_data
+                        if isinstance(item, dict)
+                    ]
+                    logger.info("Loaded %d documents from local BM25 JSON cache.", len(self.documents))
+                    return True
+            except Exception as e:
+                logger.warning("Failed to load BM25 JSON corpus cache: %s", e)
+
+        # Fallback to legacy pkl cache if exists and migrate to JSON
+        if BM25_LEGACY_PKL_PATH.exists():
+            try:
+                with open(BM25_LEGACY_PKL_PATH, "rb") as f:
                     cached_docs = pickle.load(f)
                 if isinstance(cached_docs, list) and cached_docs:
                     self.documents = cached_docs
-                    logger.info("Loaded %d documents from local BM25 cache.", len(self.documents))
+                    logger.info("Loaded %d documents from legacy BM25 pkl cache. Migrating to JSON...", len(self.documents))
+                    self._save_documents_to_cache()
                     return True
             except Exception as e:
-                logger.warning("Failed to load BM25 corpus cache: %s", e)
+                logger.warning("Failed to load legacy BM25 pkl cache: %s", e)
+
         return False
 
     def _load_documents_from_astradb(self):
@@ -197,18 +223,19 @@ class VectorStoreManager:
             AstraDBVectorStore: AstraDB vector store
         """
         if self.vectorstore is not None and len(documents) > 0:
-            logger.info("Adding %d documents to AstraDB vector store...", len(documents))
-            self.documents.extend(documents)
-            self._save_documents_to_cache()
+            with self._lock:
+                logger.info("Adding %d documents to AstraDB vector store...", len(documents))
+                self.documents.extend(documents)
+                self._save_documents_to_cache()
 
-            # Invalidate cached retriever so it is rebuilt with new corpus
-            self.bm25_retriever = None
-            self.compression_retriever = None
-            self._current_k = None
-            self._current_search_type = None
+                # Invalidate cached retriever so it is rebuilt with new corpus
+                self.bm25_retriever = None
+                self.compression_retriever = None
+                self._current_k = None
+                self._current_search_type = None
 
-            self.vectorstore = self._add_documents_to_vectorstore(documents, self.vectorstore)
-            logger.info("AstraDB vector store successfully updated.")
+                self.vectorstore = self._add_documents_to_vectorstore(documents, self.vectorstore)
+                logger.info("AstraDB vector store successfully updated.")
         elif self.vectorstore is None:
             logger.error("Cannot add documents; vectorstore is not initialized.")
             raise ValueError("No vectorstore found, please create or load a vectorstore first.")

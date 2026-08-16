@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Streamlit UI for Agentic RAG System - Decoupled Ingestion & Instant Search"""
 
+import logging
 import streamlit as st
 from pathlib import Path
 import sys
