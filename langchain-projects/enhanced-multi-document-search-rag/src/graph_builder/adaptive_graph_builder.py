@@ -216,7 +216,7 @@ class GraphBuilder:
             total_elapsed = round(time.perf_counter() - start_time, 4)
             return {
                 "question": question,
-                "answer": f"⚠️ An error occurred during request processing: {str(e)}",
+                "answer": "⚠️ An error occurred while processing your request. Please try again or rephrase your query.",
                 "retrieved_docs": [],
                 "external_citations": [],
                 "total_cost": cost_callback.total_cost,

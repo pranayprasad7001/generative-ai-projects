@@ -25,43 +25,50 @@ class SecurityNodes:
         logger.info("Running input security check.")
         logger.debug("Input query content: %s", state.question)
 
-        response = await self.input_guardrail_agent.ainvoke(
-            {
-                "messages": [
-                    HumanMessage(content=state.question)
-                ]
-            }
-        )
+        try:
+            response = await self.input_guardrail_agent.ainvoke(
+                {
+                    "messages": [
+                        HumanMessage(content=state.question)
+                    ]
+                }
+            )
 
-        messages = response.get("messages", [])
+            messages = response.get("messages", [])
 
-        if not messages:
-            logger.warning("Input security check failed to return messages. Blocking by default.")
-            state.query_blocked = True
-            state.answer = "This request could not be processed due to security filtering."
-            return state
+            if not messages:
+                logger.warning("Input security check failed to return messages. Failing closed.")
+                state.query_blocked = True
+                state.answer = "⚠️ This request could not be processed due to security filtering."
+                elapsed = time.perf_counter() - t0
+                state.latency_breakdown["security_input"] = round(elapsed, 4)
+                return state
 
-        last_message = messages[-1]
-        content = last_message.content if hasattr(last_message, "content") else str(last_message)
-        content_clean = content.strip().upper()
+            last_message = messages[-1]
+            content = last_message.content if hasattr(last_message, "content") else str(last_message)
+            content_clean = content.strip().upper()
 
-        if "BLOCKED" in content_clean or content_clean.startswith("UNSAFE"):
-            logger.warning("Input query blocked by security guardrail.")
-            state.query_blocked = True
-            state.answer = "I cannot process this request. Please rephrase your question."
-        elif "SAFE" in content_clean or "PASSED" in content_clean:
-            logger.info("Input query passed security check.")
-            state.query_blocked = False
-        else:
-            # Check for explicit safety denial phrasing only
-            denial_patterns = ["REQUEST IS UNSAFE", "DENIED", "ACCESS DENIED", "POLICY VIOLATION DETECTED"]
-            if any(pattern in content_clean for pattern in denial_patterns):
-                logger.warning("Input query denied by safety guardrail agent.")
+            if "BLOCKED" in content_clean or content_clean.startswith("UNSAFE"):
+                logger.warning("Input query blocked by security guardrail.")
                 state.query_blocked = True
                 state.answer = "I cannot process this request. Please rephrase your question."
-            else:
-                logger.info("Input query treated as SAFE by guardrail agent.")
+            elif "SAFE" in content_clean or "PASSED" in content_clean:
+                logger.info("Input query passed security check.")
                 state.query_blocked = False
+            else:
+                denial_patterns = ["REQUEST IS UNSAFE", "DENIED", "ACCESS DENIED", "POLICY VIOLATION DETECTED"]
+                if any(pattern in content_clean for pattern in denial_patterns):
+                    logger.warning("Input query denied by safety guardrail agent.")
+                    state.query_blocked = True
+                    state.answer = "I cannot process this request. Please rephrase your question."
+                else:
+                    logger.info("Input query treated as SAFE by guardrail agent.")
+                    state.query_blocked = False
+
+        except Exception as e:
+            logger.error("Exception during input security guardrail check: %s. Failing closed.", e, exc_info=True)
+            state.query_blocked = True
+            state.answer = "⚠️ This request could not be processed due to security filtering."
 
         elapsed = time.perf_counter() - t0
         state.latency_breakdown["security_input"] = round(elapsed, 4)

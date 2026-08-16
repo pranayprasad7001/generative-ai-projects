@@ -96,7 +96,7 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         result = await self.builder.run("What is AI?")
 
         self.assertEqual(result["question"], "What is AI?")
-        self.assertIn("error occurred during request processing", result["answer"])
+        self.assertIn("error occurred", result["answer"].lower())
         self.assertEqual(result["total_cost"], 0.0)
 
     def test_clear_checkpointer(self):

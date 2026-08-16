@@ -104,7 +104,7 @@ class ChatMessage(BaseModel):
 class QueryRequest(BaseModel):
     question: str = Field(..., description="The query/question to answer")
     search_type: Optional[str] = Field("similarity", description="'similarity' or 'mmr'")
-    k: Optional[int] = Field(5, description="Number of documents to retrieve")
+    k: Optional[int] = Field(5, ge=1, le=50, description="Number of documents to retrieve (1 to 50)")
     thread_id: Optional[str] = Field("default_thread", description="Thread identifier for session tracking")
     session_id: Optional[str] = Field(None, description="Optional tenant or session identifier for corpus isolation")
     messages: Optional[List[ChatMessage]] = Field(default_factory=list, description="Prior conversation history")
@@ -147,9 +147,17 @@ class HealthResponse(BaseModel):
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
     """Health check endpoint for Render, Kubernetes, and load balancers."""
+    astra_ok = False
+    if vector_store_manager and getattr(vector_store_manager, "vectorstore", None):
+        try:
+            col = getattr(vector_store_manager.vectorstore.astra_env, "collection", None)
+            astra_ok = col is not None
+        except Exception:
+            astra_ok = False
+
     return HealthResponse(
-        status="healthy",
-        astra_db_connected=vector_store_manager is not None,
+        status="healthy" if astra_ok else "degraded",
+        astra_db_connected=astra_ok,
         model_configured=Config.LLM_MODEL_GENERATOR,
         timestamp=time.time()
     )
