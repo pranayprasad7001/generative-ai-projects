@@ -1,6 +1,6 @@
 # Enhanced Multi-Document Search RAG
 
-> An adaptive, self-correcting, and security-aware Retrieval-Augmented Generation system built with **LangGraph**, **Hybrid Retrieval** (Dense + BM25 + Cohere Reranking), **MCP-based External Search**, **LiteLLM Gateway**, **Redis Semantic Caching**, **Layered Security Guardrails**, **5-Dimension Document Versioning**, **Stage-by-Stage Latency Breakdowns**, **FastAPI Backend Server**, and **Streamlit UI**.
+> An adaptive, self-correcting, and security-aware Retrieval-Augmented Generation system built with **LangGraph**, **AstraDB Vector Retrieval & Cohere Reranking**, **MCP-based External Search**, **LiteLLM Gateway**, **Layered Security Guardrails**, **7-Dimension Deterministic Chunk Versioning**, **Stage-by-Stage Latency Breakdowns**, **FastAPI Backend Server**, and **Streamlit UI**.
 
 This project goes beyond fixed `retrieve → generate` pipelines. Instead of assuming retrieval and generation will always succeed, the system evaluates intermediate results using continuous confidence scores, rewrites ambiguous queries, executes critique-aware self-correction loops, escalates to external Model Context Protocol (MCP) search when local knowledge is insufficient, and enforces fail-closed security controls at all application boundaries.
 
@@ -10,13 +10,13 @@ The application can be operated via a **FastAPI REST API**, an interactive **Str
 
 ## Key Capabilities
 
-* **Adaptive LangGraph Workflow:** Dynamic, bounded self-correction loops (`MAX_REWRITES = 3`, `MAX_GENERATIONS = 3`) that route queries intelligently.
+* **Adaptive LangGraph Workflow:** Dynamic, bounded self-correction loops (`MAX_REWRITES = 3`, `MAX_GENERATIONS = 3`) that route queries intelligently based on document relevance, hallucination checks, and answer quality.
 * **Modular Node Architecture (`src/nodes/`):** Clean separation into `security_nodes.py`, `retrieval_nodes.py`, `generation_nodes.py`, `evaluation_nodes.py`, and pure conditional `routing.py`.
-* **Hybrid Retrieval (`hybrid_retrieval`):** AstraDB Vector Embeddings + BM25 Lexical Search + Reciprocal Rank Fusion via `EnsembleRetriever` + Cohere Semantic Reranking.
+* **Unified AstraDB Cloud Retrieval & Reranking:** Cloud-native AstraDB vector similarity and MMR retrieval with candidate oversampling (`candidate_k = max(2k, 10)`), combined with Cohere cross-encoder semantic reranking.
 * **Continuous Evaluator Scoring:** Rich evaluation schemas returning continuous confidence scores (0.0 to 1.0), categorical decisions (`pass`, `retry`, `rewrite`, `fail`), and configurable thresholds.
 * **Granular Trace Reasoning:** Stage-specific reasoning fields (`query_analysis`, `retrieval_reasoning`, `rewrite_reasoning`, `grounding_reasoning`, `relevance_reasoning`) for transparent LangSmith traces.
 * **Structured MCP Citations:** Automatic structured source metadata extraction (`source`, `title`, `url`, `tool`, `retrieval_timestamp`) from MCP tools (Tavily, Wikipedia, arXiv).
-* **5-Dimension Document Identity & Versioning:** Deterministic hashing across source, version, chunking configuration, embedding model, and content to eliminate stale index collisions.
+* **7-Dimension Document Identity & Versioning:** Deterministic hashing across source, version, chunking strategy, chunk size, chunk overlap, embedding model, chunk index, and content to eliminate duplicate and stale index collisions.
 * **Stage-by-Stage Latency Breakdown:** Real-time timing across query analysis, retrieval, reranker, grading, generation, MCP tools, and total latency.
 * **Production REST API & Session Isolation:** FastAPI endpoints for isolated multi-tenant querying, document ingestion, and conversational history without mutating shared graph state.
 
@@ -57,11 +57,11 @@ The application can be operated via a **FastAPI REST API**, an interactive **Str
                     │                                     │
                     ▼                                     ▼
           ┌──────────────────┐                  ┌──────────────────┐
-          │ Hybrid Retrieval │                  │    MCP Agent     │
+          │ AstraDB Retrieval│                  │    MCP Agent     │
           │                  │                  │                  │
-          │ Dense + BM25     │                  │ Tavily           │
-          │ Similarity/MMR   │                  │ Wikipedia        │
-          │ Ensemble         │                  │ arXiv            │
+          │ Vector Similarity│                  │ Tavily           │
+          │ MMR Oversampling │                  │ Wikipedia        │
+          │ Session Filtering│                  │ arXiv            │
           └────────┬─────────┘                  └────────┬─────────┘
                    │                                     │
                    ▼                                     │
@@ -81,7 +81,7 @@ The application can be operated via a **FastAPI REST API**, an interactive **Str
           ▼                 ▼                            │
        Generate        Query Rewrite                     │
           │                 │                            │
-          │                 └──────► Hybrid Retrieval    │
+          │                 └──────► AstraDB Retrieval   │
           │                                              │
           ▼                                              │
    Hallucination Check                                   │
@@ -133,7 +133,7 @@ input_query_security_check
         ↓
 query_analyzer
         ↓
-hybrid_retrieval (Dense + BM25 + Cohere Rerank)
+hybrid_retrieval (AstraDB Vector + Cohere Rerank)
         ↓
 documents_grader
         ↓
@@ -163,7 +163,7 @@ enhanced-multi-document-search-rag/
 ├── docker-compose.yml              # Multi-Service Orchestration
 ├── src/
 │   ├── config/
-│   │   ├── llmgateway_config.py    # LiteLLM Gateway & Environment Configuration
+│   │   ├── llmgateway_config.py    # LiteLLM Gateway & RateLimited Embeddings
 │   │   ├── mcp_config.py           # Model Context Protocol Client & Fallbacks
 │   │   └── cost_callback.py        # Token & USD Cost Tracking Callback Handler
 │   ├── document_ingestion/
@@ -187,23 +187,27 @@ enhanced-multi-document-search-rag/
 │   │   └── adaptive_state.py       # Central AdaptiveRAGState Model & Latency Fields
 │   ├── studio_graph.py             # LangGraph Studio Visualization Entry Point
 │   └── vectorstore/
-│       └── vectorstore.py          # AstraDB Vector Store, BM25 Hydration, Cohere Rerank
+│       └── vectorstore.py          # AstraDB Cloud Vector Store, Cohere Rerank, Deduplication
 └── tests/
     ├── test_adaptive_node.py       # Node Facade & Pipeline Tests
     ├── test_api.py                 # FastAPI Endpoint Tests
+    ├── test_chunker.py             # Recursive, Semantic, & Hybrid Chunker Tests
+    ├── test_document_processor.py  # Multi-Format Document Ingestion Tests
     ├── test_evaluation_nodes.py    # Continuous Evaluator & Score Threshold Tests
     ├── test_generation_nodes.py    # Answer Generator & Critique Tests
     ├── test_graph_builder.py       # StateGraph Compilation Tests
+    ├── test_mcp_config.py          # MCP Tool Fallback & Handler Tests
     ├── test_rag_integration.py     # End-to-End Multi-Turn Integration Tests
-    ├── test_retrieval_nodes.py     # Hybrid Retrieval & Structured Citation Tests
+    ├── test_rate_limiter.py        # Rate-Limited Embedding & LLM Tests
+    ├── test_retrieval_nodes.py     # Retrieval Nodes & Structured Citation Tests
     ├── test_routing.py             # Conditional Router Edge Tests
     ├── test_security_nodes.py      # Fail-Closed Security Tests
-    └── test_vectorstore.py         # 5D Identity & Reranker Tests
+    └── test_vectorstore.py         # 7D Chunk Identity, Deduplication & Reranker Tests
 ```
 
 ---
 
-## 5-Dimension Composite Document Identity
+## 7-Dimension Composite Document Identity
 
 To guarantee zero-duplicate ingestion and prevent index pollution when preprocessing configurations change, chunk identity is computed deterministically:
 
@@ -212,8 +216,11 @@ $$\text{Chunk ID} = \text{SHA256}(\text{Source} \parallel \text{Version} \parall
 1. **`source`**: Path or URL of the ingested document.
 2. **`doc_version`**: Explicit document version string (default: `"v1"`).
 3. **`chunk_strategy`**: Splitting strategy used (`recursive`, `semantic`, `hybrid`).
-4. **`chunking_config`**: Target chunk size, chunk overlap, and sequential chunk index.
-5. **`embedding_model`**: Model used to vectorize the chunk (e.g. `gemini-embedding-2`).
+4. **`chunk_size`**: Target chunk size.
+5. **`chunk_overlap`**: Target chunk overlap.
+6. **`embedding_model`**: Model used to vectorize the chunk (e.g. `gemini-embedding-2`).
+7. **`chunk_index`**: Sequential chunk index within the document.
+8. **`content`**: Exact textual body of the chunk.
 
 ---
 
@@ -321,10 +328,10 @@ langgraph dev
 
 ## Running the Automated Test Suite
 
-The project includes an extensive test suite covering unit tests, API tests, evaluator scoring thresholds, and end-to-end multi-turn conversation workflows:
+The project includes an extensive test suite with **104 unit and integration tests** covering component mocks, security guardrails, evaluator scoring thresholds, and end-to-end multi-turn conversation workflows:
 
 ```bash
-python -m unittest discover tests
+pytest tests/ -v
 ```
 
 ---
