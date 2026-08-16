@@ -1,34 +1,24 @@
-"""Vector Store and Hybrid Retrieval Management Module.
+"""Vector Store and Retrieval Management Module using AstraDB and Cohere Rerank.
 
 This module coordinates:
-- AstraDB vector embeddings via LiteLLM Gateway
-- BM25 lexical retriever hydration and disk caching with corpus hash validation
-- Reciprocal Rank Fusion via LangChain EnsembleRetriever
-- Semantic document compression and reranking via Cohere Rerank
-- Deterministic composite chunk identity based on document and chunk metadata for zero-duplicate ingestion
+- AstraDB cloud vector embeddings, document storage, and metadata filtering via LiteLLM Gateway
+- Deterministic composite chunk identity hashing for zero-duplicate ingestion
+- Dynamic candidate oversampling (similarity / MMR)
+- Cross-encoder semantic document compression and reranking via Cohere Rerank
 """
 
-import os
-import json
-import pickle
 import logging
 import hashlib
 import threading
-from pathlib import Path
 from typing import Any, List, Optional
 
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
-from langchain_community.retrievers import BM25Retriever
-from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
+from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_classic.schema import Document
 from config.llmgateway_config import Config
 
 logger = logging.getLogger(__name__)
-
-CACHE_DIR = Path("data")
-BM25_CACHE_PATH = CACHE_DIR / "bm25_corpus.json"
-BM25_LEGACY_PKL_PATH = CACHE_DIR / "bm25_corpus.pkl"
 
 
 def compute_chunk_identity(doc: Document, default_embedding_model: str = Config.EMBEDDING_MODEL) -> str:
@@ -68,10 +58,10 @@ def compute_corpus_hash(docs: List[Document]) -> str:
 
 
 class VectorStoreManager:
-    """Manages AstraDB vector stores with LiteLLM Gateway embeddings and persistent Hybrid Retrieval."""
+    """Manages AstraDB cloud vector store with LiteLLM Gateway embeddings and Cohere Reranking."""
 
     def __init__(self):
-        logger.info("Initializing VectorStoreManager with LiteLLM Gateway embeddings.")
+        logger.info("Initializing VectorStoreManager with LiteLLM Gateway embeddings and AstraDB.")
         self._lock = threading.Lock()
         self.embeddings = Config.get_embeddings()
         self.vectorstore = AstraDBVectorStore(
@@ -80,12 +70,9 @@ class VectorStoreManager:
             token=Config.ASTRA_DB_API_KEY,
             api_endpoint=Config.ASTRA_DB_API_ENDPOINT,
         )
-        self.bm25_retriever: Optional[BM25Retriever] = None
-        self.ensemble_retriever: Optional[EnsembleRetriever] = None
         self.compression_retriever: Optional[ContextualCompressionRetriever] = None
         self.retriever = None
         self.documents: List[Document] = []
-        self._cached_corpus_hash: Optional[str] = None
         self._current_k: Optional[int] = None
         self._current_search_type: Optional[str] = None
         self.cohere_reranker = CohereRerank(
@@ -93,119 +80,12 @@ class VectorStoreManager:
             top_n=Config.COHERE_RERANKER_TOP_N
         )
 
-        # Hydrate documents for BM25 from disk cache or AstraDB
-        self._hydrate_documents()
-
-    def _save_documents_to_cache(self):
-        """Persist document corpus and deterministic corpus hash to local JSON disk cache."""
-        try:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            serializable_docs = [
-                {"page_content": doc.page_content, "metadata": getattr(doc, "metadata", {})}
-                for doc in self.documents
-            ]
-            corpus_hash = compute_corpus_hash(self.documents)
-            self._cached_corpus_hash = corpus_hash
-            payload = {
-                "corpus_hash": corpus_hash,
-                "documents": serializable_docs,
-            }
-            with open(BM25_CACHE_PATH, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False)
-            logger.info("Saved %d documents to BM25 JSON cache at %s (hash: %s)", len(self.documents), BM25_CACHE_PATH, corpus_hash[:8])
-        except Exception as e:
-            logger.warning("Could not save BM25 corpus cache: %s", e)
-
-    def _load_documents_from_cache(self) -> bool:
-        """Load document corpus from local JSON cache (or legacy pkl)."""
-        if BM25_CACHE_PATH.exists():
-            try:
-                with open(BM25_CACHE_PATH, "r", encoding="utf-8") as f:
-                    cached_data = json.load(f)
-                if isinstance(cached_data, dict):
-                    docs_raw = cached_data.get("documents", [])
-                    self._cached_corpus_hash = cached_data.get("corpus_hash")
-                    if isinstance(docs_raw, list) and docs_raw:
-                        self.documents = [
-                            Document(page_content=item.get("page_content", ""), metadata=item.get("metadata", {}))
-                            for item in docs_raw
-                            if isinstance(item, dict)
-                        ]
-                        logger.info("Loaded %d documents from local BM25 JSON cache (hash: %s).", len(self.documents), (self._cached_corpus_hash or "")[:8])
-                        return True
-                elif isinstance(cached_data, list) and cached_data:
-                    self.documents = [
-                        Document(page_content=item.get("page_content", ""), metadata=item.get("metadata", {}))
-                        for item in cached_data
-                        if isinstance(item, dict)
-                    ]
-                    self._cached_corpus_hash = compute_corpus_hash(self.documents)
-                    logger.info("Loaded %d documents from legacy format BM25 JSON cache.", len(self.documents))
-                    self._save_documents_to_cache()
-                    return True
-            except Exception as e:
-                logger.warning("Failed to load BM25 JSON corpus cache: %s", e)
-
-        # Fallback to legacy pkl cache if exists and migrate to JSON
-        if BM25_LEGACY_PKL_PATH.exists():
-            try:
-                with open(BM25_LEGACY_PKL_PATH, "rb") as f:
-                    cached_docs = pickle.load(f)
-                if isinstance(cached_docs, list) and cached_docs:
-                    self.documents = cached_docs
-                    self._cached_corpus_hash = compute_corpus_hash(self.documents)
-                    logger.info("Loaded %d documents from legacy BM25 pkl cache. Migrating to JSON...", len(self.documents))
-                    self._save_documents_to_cache()
-                    return True
-            except Exception as e:
-                logger.warning("Failed to load legacy BM25 pkl cache: %s", e)
-
-        return False
-
-    def _load_documents_from_astradb(self):
-        """Fetch indexed document content from AstraDB to hydrate or rebuild BM25 cache."""
-        try:
-            if not self.vectorstore or not hasattr(self.vectorstore, "astra_env"):
-                return
-            collection = getattr(self.vectorstore.astra_env, "collection", None)
-            if collection is None:
-                return
-
-            logger.info("Fetching corpus from AstraDB collection '%s' to verify BM25 cache...", Config.ASTRA_DB_COLLECTION_NAME)
-            cursor = collection.find(projection={"content": True, "metadata": True})
-            loaded_docs = []
-            for record in cursor:
-                content = record.get("content")
-                if content:
-                    metadata = record.get("metadata") or {}
-                    loaded_docs.append(Document(page_content=content, metadata=metadata))
-
-            if loaded_docs:
-                astradb_hash = compute_corpus_hash(loaded_docs)
-                if astradb_hash != self._cached_corpus_hash or not self.documents:
-                    logger.info("AstraDB corpus hash differs from cache (%s vs %s). Rebuilding BM25 corpus...", astradb_hash[:8], (self._cached_corpus_hash or "none")[:8])
-                    self.documents = loaded_docs
-                    self._cached_corpus_hash = astradb_hash
-                    self._save_documents_to_cache()
-                else:
-                    logger.info("BM25 cache is up-to-date with AstraDB corpus hash (%s).", astradb_hash[:8])
-            else:
-                logger.info("No existing documents found in AstraDB collection.")
-        except Exception as e:
-            logger.warning("Could not hydrate documents from AstraDB: %s", e)
-
-    def _hydrate_documents(self):
-        """Initialize document corpus for BM25 from disk cache or AstraDB."""
-        cache_loaded = self._load_documents_from_cache()
-        if not cache_loaded:
-            self._load_documents_from_astradb()
-
     def _add_documents_to_vectorstore(self, split_docs: List[Document], vector_store: AstraDBVectorStore) -> AstraDBVectorStore:
         """
         Embeds documents and prevents duplicates using deterministic composite chunk identity hashing.
         Args:
-            split_docs: List[Document]: List of documents to embed
-            vector_store: AstraDBVectorStore: AstraDB vector store
+            split_docs (List[Document]): List of documents to embed
+            vector_store (AstraDBVectorStore): AstraDB vector store
         Returns:
             AstraDBVectorStore: AstraDB vector store
         """
@@ -246,15 +126,14 @@ class VectorStoreManager:
 
         if new_docs:
             vector_store.add_documents(new_docs, ids=new_ids)
-            logger.info("Processed and inserted %d new chunks into vectorstore (skipped %d existing).", len(new_docs), len(existing_ids))
+            logger.info("Processed and inserted %d new chunks into AstraDB vectorstore (skipped %d existing).", len(new_docs), len(existing_ids))
         else:
-            logger.info("All %d documents already exist in the vectorstore.", len(split_docs))
+            logger.info("All %d documents already exist in the AstraDB vectorstore.", len(split_docs))
         return vector_store
 
     def create_vectorstore(self, documents: List[Document]) -> AstraDBVectorStore:
         """
-        Create or update AstraDB vector store and in-memory BM25 corpus from documents.
-        Deduplicates against existing in-memory chunk IDs before updating BM25 corpus.
+        Create or update AstraDB vector store from documents with deduplication.
         Args:
             documents (List[Document]): List of documents to add
         Returns:
@@ -264,24 +143,7 @@ class VectorStoreManager:
             with self._lock:
                 logger.info("Adding %d documents to AstraDB vector store...", len(documents))
 
-                # Deduplicate before adding to in-memory BM25 corpus
-                existing_bm25_ids = {compute_chunk_identity(d) for d in self.documents}
-                new_bm25_docs = []
-                for doc in documents:
-                    doc_id = compute_chunk_identity(doc)
-                    if doc_id not in existing_bm25_ids:
-                        existing_bm25_ids.add(doc_id)
-                        new_bm25_docs.append(doc)
-
-                if new_bm25_docs:
-                    self.documents.extend(new_bm25_docs)
-                    self._save_documents_to_cache()
-                    logger.info("Added %d new unique chunks to BM25 corpus (skipped %d duplicates).", len(new_bm25_docs), len(documents) - len(new_bm25_docs))
-                else:
-                    logger.info("All %d chunks already exist in BM25 corpus; skipping in-memory BM25 extension.", len(documents))
-
-                # Invalidate cached retriever so it is rebuilt with new corpus
-                self.bm25_retriever = None
+                # Invalidate cached retriever so it is rebuilt
                 self.compression_retriever = None
                 self._current_k = None
                 self._current_search_type = None
@@ -316,11 +178,11 @@ class VectorStoreManager:
         session_id: Optional[str] = None
     ) -> ContextualCompressionRetriever:
         """
-        Create a hybrid retriever from vector store with dynamic Cohere reranking and optional session filtering.
+        Create a retriever from AstraDB vector store with dynamic Cohere reranking and optional session filtering.
         Thread-safe: constructs dedicated retriever and reranker instances without mutating shared global state.
         
         Args:
-            vectorstore: AstraDBVectorStore 
+            vectorstore (AstraDBVectorStore): AstraDB vector store instance
             k (int): Number of final documents to retrieve after reranking
             search_type (str): Type of search to perform ("similarity" or "mmr")
             filter (dict, optional): Metadata filter for vector store
@@ -334,7 +196,7 @@ class VectorStoreManager:
 
         # Oversample candidates (2x k, min 10) so Cohere reranker has high-recall candidates
         candidate_k = max(k * 2, 10)
-        logger.info("Creating hybrid retriever with target k=%d (candidate_k=%d), search_type='%s', filter=%s", k, candidate_k, search_type, filter_dict)
+        logger.info("Creating AstraDB retriever with target k=%d (candidate_k=%d), search_type='%s', filter=%s", k, candidate_k, search_type, filter_dict)
 
         if vectorstore is None:
             logger.error("Cannot create retriever; vectorstore is not initialized.")
@@ -352,35 +214,14 @@ class VectorStoreManager:
             top_n=k
         )
 
-        target_documents = self.documents
-        if session_id and self.documents:
-            target_documents = [d for d in self.documents if d.metadata.get("session_id") == session_id]
-
-        if target_documents:
-            bm25_retriever = BM25Retriever.from_documents(target_documents)
-            bm25_retriever.k = candidate_k
-            ensemble_retriever = EnsembleRetriever(
-                retrievers=[vec_retriever, bm25_retriever],
-                weights=[0.7, 0.3]
-            )
-            base_retriever = ensemble_retriever
-            logger.info("EnsembleRetriever initialized with AstraDB vector and BM25 lexical search.")
-        else:
-            logger.warning("No documents loaded in corpus yet; BM25 disabled. Using vector store retriever directly.")
-            bm25_retriever = None
-            ensemble_retriever = None
-            base_retriever = vec_retriever
-
         compression_retriever = ContextualCompressionRetriever(
             base_compressor=cohere_reranker,
-            base_retriever=base_retriever
+            base_retriever=vec_retriever
         )
 
         # For default zero-argument caching
         if filter is None and session_id is None:
             self.retriever = vec_retriever
-            self.bm25_retriever = bm25_retriever
-            self.ensemble_retriever = ensemble_retriever
             self.compression_retriever = compression_retriever
             self._current_k = k
             self._current_search_type = search_type
@@ -456,7 +297,7 @@ class VectorStoreManager:
         session_id: Optional[str] = None
     ) -> List[Document]:
         """
-        Retrieve and rerank documents from vector store and BM25 in a single optimized pass.
+        Retrieve and rerank documents from AstraDB vector store in a single optimized pass.
         Args:
             query (str): Query to retrieve documents for
             k (int): Number of documents to retrieve
@@ -478,7 +319,6 @@ class VectorStoreManager:
         )
         logger.info("Retrieving & reranking documents for query: %s (k=%d, search_type='%s')", repr(query), k, search_type)
         try:
-            # ContextualCompressionRetriever handles both hybrid retrieval and Cohere reranking in 1 pass
             results = retriever.invoke(query)
         except Exception as e:
             logger.error("Error retrieving documents for query: %s", query)
