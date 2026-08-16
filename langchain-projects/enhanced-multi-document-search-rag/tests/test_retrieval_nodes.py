@@ -9,7 +9,7 @@ import json
 from state.adaptive_state import AdaptiveRAGState
 from nodes.retrieval_nodes import RetrievalNodes
 from nodes.schema import ToolUse, QuestionRewrite
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from langchain_core.messages import ToolMessage, AIMessage
 
 

@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, List
 from state.adaptive_state import AdaptiveRAGState
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig
 from langchain_core.messages import ToolMessage
@@ -62,7 +62,7 @@ class RetrievalNodes:
         return state
 
     async def hybrid_retrieval(self, state: AdaptiveRAGState, config: RunnableConfig | None = None) -> AdaptiveRAGState:
-        """Perform hybrid retrieval (dense embeddings + BM25 + Cohere rerank) to find relevant documents."""
+        """Perform dense vector retrieval and Cohere reranking to find relevant documents."""
         t0 = time.perf_counter()
         logger.info("Executing hybrid retrieval.")
         logger.debug("Hybrid retrieval query: %s", state.question)

@@ -12,7 +12,7 @@ if str(REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from fastapi.testclient import TestClient
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from api import app
 
 

@@ -38,7 +38,7 @@ QUERY_ANALYZER_SYSTEM_PROMPT = """
         1. hybrid_retrieval
            Choose this when the answer is expected to be found in the
            application's indexed documents or knowledge base. This performs
-           dense embeddings + BM25 keyword retrieval + ensemble + Cohere reranking.
+           dense vector embeddings + Cohere reranking.
 
         2. external_search
            Choose this when the question should be handled by the external

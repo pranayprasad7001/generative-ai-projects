@@ -4,7 +4,7 @@ This module coordinates:
 - AstraDB cloud vector embeddings, document storage, and metadata filtering via LiteLLM Gateway
 - Deterministic composite chunk identity hashing for zero-duplicate ingestion
 - Dynamic candidate oversampling (similarity / MMR)
-- Cross-encoder semantic document compression and reranking via Cohere Rerank
+- Cross-encoder semantic document reranking via Cohere Rerank
 """
 
 import logging
@@ -12,10 +12,15 @@ import hashlib
 import threading
 from typing import Any, List, Optional
 
+from pydantic import ConfigDict
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
-from langchain_classic.retrievers import ContextualCompressionRetriever
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
+from langchain_core.retrievers import BaseRetriever
+from langchain_core.callbacks import (
+    CallbackManagerForRetrieverRun,
+    AsyncCallbackManagerForRetrieverRun,
+)
 from config.llmgateway_config import Config
 
 logger = logging.getLogger(__name__)
@@ -57,6 +62,47 @@ def compute_corpus_hash(docs: List[Document]) -> str:
     return hashlib.sha256("|".join(chunk_ids).encode("utf-8")).hexdigest()
 
 
+class RerankedVectorRetriever(BaseRetriever):
+    """Custom retriever that retrieves candidate documents from a base vector retriever
+    and applies Cohere cross-encoder reranking.
+    """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    base_retriever: Any
+    cohere_reranker: Any
+
+    def _get_relevant_documents(
+        self, query: str, *, run_manager: CallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        docs = self.base_retriever.invoke(query)
+        if not docs:
+            return []
+        if len(docs) == 1:
+            return docs
+        try:
+            return list(self.cohere_reranker.compress_documents(documents=docs, query=query))
+        except Exception:
+            logger.exception("Reranking failed in retriever. Returning candidate documents.")
+            return docs
+
+    async def _aget_relevant_documents(
+        self, query: str, *, run_manager: AsyncCallbackManagerForRetrieverRun
+    ) -> List[Document]:
+        if hasattr(self.base_retriever, "ainvoke"):
+            docs = await self.base_retriever.ainvoke(query)
+        else:
+            docs = self.base_retriever.invoke(query)
+        if not docs:
+            return []
+        if len(docs) == 1:
+            return docs
+        try:
+            return list(self.cohere_reranker.compress_documents(documents=docs, query=query))
+        except Exception:
+            logger.exception("Reranking failed in retriever. Returning candidate documents.")
+            return docs
+
+
 class VectorStoreManager:
     """Manages AstraDB cloud vector store with LiteLLM Gateway embeddings and Cohere Reranking."""
 
@@ -70,9 +116,7 @@ class VectorStoreManager:
             token=Config.ASTRA_DB_API_KEY,
             api_endpoint=Config.ASTRA_DB_API_ENDPOINT,
         )
-        self.compression_retriever: Optional[ContextualCompressionRetriever] = None
-        self.retriever = None
-        self.documents: List[Document] = []
+        self._cached_retriever: Optional[RerankedVectorRetriever] = None
         self._current_k: Optional[int] = None
         self._current_search_type: Optional[str] = None
         self.cohere_reranker = CohereRerank(
@@ -144,7 +188,7 @@ class VectorStoreManager:
                 logger.info("Adding %d documents to AstraDB vector store...", len(documents))
 
                 # Invalidate cached retriever so it is rebuilt
-                self.compression_retriever = None
+                self._cached_retriever = None
                 self._current_k = None
                 self._current_search_type = None
 
@@ -176,7 +220,7 @@ class VectorStoreManager:
         search_type: str = "similarity",
         filter: Optional[dict] = None,
         session_id: Optional[str] = None
-    ) -> ContextualCompressionRetriever:
+    ) -> RerankedVectorRetriever:
         """
         Create a retriever from AstraDB vector store with dynamic Cohere reranking and optional session filtering.
         Thread-safe: constructs dedicated retriever and reranker instances without mutating shared global state.
@@ -188,7 +232,7 @@ class VectorStoreManager:
             filter (dict, optional): Metadata filter for vector store
             session_id (str, optional): Target session ID to isolate retrieval
         Returns:
-            ContextualCompressionRetriever: Reranked compression retriever
+            RerankedVectorRetriever: Custom retriever that performs vector search and Cohere reranking
         """
         filter_dict = dict(filter) if filter else {}
         if session_id:
@@ -208,25 +252,24 @@ class VectorStoreManager:
 
         vec_retriever = vectorstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
-        # Create a dedicated Cohere reranker instance per retriever to prevent mutating shared state
+        # Dedicated Cohere reranker instance per retriever
         cohere_reranker = CohereRerank(
             model=Config.COHERE_RERANKER_MODEL,
             top_n=k
         )
 
-        compression_retriever = ContextualCompressionRetriever(
-            base_compressor=cohere_reranker,
-            base_retriever=vec_retriever
+        reranked_retriever = RerankedVectorRetriever(
+            base_retriever=vec_retriever,
+            cohere_reranker=cohere_reranker
         )
 
-        # For default zero-argument caching
+        # Cache default zero-filter retriever
         if filter is None and session_id is None:
-            self.retriever = vec_retriever
-            self.compression_retriever = compression_retriever
+            self._cached_retriever = reranked_retriever
             self._current_k = k
             self._current_search_type = search_type
 
-        return compression_retriever
+        return reranked_retriever
 
     def rerank_documents(self, query: str, documents: List[Document], top_n: Optional[int] = None) -> List[Document]:
         """
@@ -264,16 +307,16 @@ class VectorStoreManager:
         search_type: str = "similarity",
         filter: Optional[dict] = None,
         session_id: Optional[str] = None
-    ) -> ContextualCompressionRetriever:
+    ) -> RerankedVectorRetriever:
         """
-        Get the compression retriever, initializing or creating a dedicated per-query retriever.
+        Get the reranked vector retriever, initializing or creating a dedicated per-query retriever.
         """
         if self.vectorstore is None:
             logger.error("Cannot get retriever; vectorstore is not initialized.")
             raise ValueError("No vectorstore found, please create or load a vectorstore first.")
 
         if (
-            self.compression_retriever is None
+            self._cached_retriever is None
             or self._current_k != k
             or self._current_search_type != search_type
             or filter is not None
@@ -286,7 +329,7 @@ class VectorStoreManager:
                 filter=filter,
                 session_id=session_id
             )
-        return self.compression_retriever
+        return self._cached_retriever
 
     def retrieve(
         self,

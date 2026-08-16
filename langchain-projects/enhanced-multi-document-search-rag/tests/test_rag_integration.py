@@ -7,7 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from graph_builder.adaptive_graph_builder import GraphBuilder
 from state.adaptive_state import AdaptiveRAGState
 from nodes.schema import (

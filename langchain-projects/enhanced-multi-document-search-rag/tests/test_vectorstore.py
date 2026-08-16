@@ -6,8 +6,13 @@ import os
 # Add src directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from langchain_classic.schema import Document
-from vectorstore.vectorstore import VectorStoreManager, compute_chunk_identity, compute_corpus_hash
+from langchain_core.documents import Document
+from vectorstore.vectorstore import (
+    VectorStoreManager,
+    RerankedVectorRetriever,
+    compute_chunk_identity,
+    compute_corpus_hash
+)
 
 
 class TestVectorStoreManager(unittest.TestCase):
@@ -86,8 +91,7 @@ class TestVectorStoreManager(unittest.TestCase):
         id_emb2 = compute_chunk_identity(doc_base, default_embedding_model="text-embedding-3-small")
         self.assertNotEqual(id_emb1, id_emb2)
 
-    @patch("vectorstore.vectorstore.ContextualCompressionRetriever")
-    def test_create_retriever(self, mock_compression_retriever):
+    def test_create_retriever(self):
         # Mock vector store's as_retriever
         mock_retriever = MagicMock()
         self.mock_astradb_instance.as_retriever.return_value = mock_retriever
@@ -99,9 +103,8 @@ class TestVectorStoreManager(unittest.TestCase):
         self.mock_astradb_instance.as_retriever.assert_called_once_with(search_type="mmr", search_kwargs={"k": 10})
         # Verify dedicated compressor was constructed with top_n=5
         self.mock_cohere_cls.assert_called_with(model=unittest.mock.ANY, top_n=5)
-        comp_kwargs = mock_compression_retriever.call_args.kwargs
-        self.assertEqual(comp_kwargs["base_compressor"], self.mock_cohere_instance)
-        self.assertEqual(comp_kwargs["base_retriever"], mock_retriever)
+        self.assertIsInstance(ret, RerankedVectorRetriever)
+        self.assertEqual(ret.base_retriever, mock_retriever)
         self.assertEqual(self.manager._current_k, 5)
         self.assertEqual(self.manager._current_search_type, "mmr")
 
@@ -126,19 +129,20 @@ class TestVectorStoreManager(unittest.TestCase):
         reranked_single = self.manager.rerank_documents("query", docs_single)
         self.assertEqual(reranked_single, docs_single)
 
-    @patch("vectorstore.vectorstore.ContextualCompressionRetriever")
-    def test_retrieve(self, mock_compression_retriever):
+    def test_retrieve(self):
         # Mock vectorstore as_retriever
-        self.mock_astradb_instance.as_retriever.return_value = MagicMock()
-        
-        # Mock compression retriever invoke return
-        mock_comp_inst = MagicMock()
-        mock_comp_inst.invoke.return_value = [Document(page_content="result doc")]
-        mock_compression_retriever.return_value = mock_comp_inst
+        mock_vec_retriever = MagicMock()
+        cand_docs = [Document(page_content="cand 1"), Document(page_content="cand 2")]
+        mock_vec_retriever.invoke.return_value = cand_docs
+        self.mock_astradb_instance.as_retriever.return_value = mock_vec_retriever
+
+        # Mock cohere compress
+        reranked_docs = [Document(page_content="cand 2")]
+        self.mock_cohere_instance.compress_documents.return_value = reranked_docs
 
         res = self.manager.retrieve("query", k=3, search_type="mmr")
         self.assertEqual(len(res), 1)
-        self.assertEqual(res[0].page_content, "result doc")
+        self.assertEqual(res[0].page_content, "cand 2")
 
     def test_add_documents_returns_count(self):
         with patch.object(self.manager, "create_vectorstore") as mock_create:
@@ -147,12 +151,12 @@ class TestVectorStoreManager(unittest.TestCase):
             self.assertEqual(count, 2)
             mock_create.assert_called_once_with(docs)
 
-    @patch("vectorstore.vectorstore.ContextualCompressionRetriever")
-    def test_retrieve_with_session_isolation(self, mock_compression_retriever):
-        self.mock_astradb_instance.as_retriever.return_value = MagicMock()
-        mock_comp_inst = MagicMock()
-        mock_comp_inst.invoke.return_value = [Document(page_content="session doc", metadata={"session_id": "sess_123"})]
-        mock_compression_retriever.return_value = mock_comp_inst
+    def test_retrieve_with_session_isolation(self):
+        mock_vec_retriever = MagicMock()
+        cand_docs = [Document(page_content="session doc", metadata={"session_id": "sess_123"})]
+        mock_vec_retriever.invoke.return_value = cand_docs
+        self.mock_astradb_instance.as_retriever.return_value = mock_vec_retriever
+        self.mock_cohere_instance.compress_documents.return_value = cand_docs
 
         res = self.manager.retrieve("query", k=2, session_id="sess_123")
         self.assertEqual(len(res), 1)
@@ -176,3 +180,4 @@ class TestVectorStoreManager(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

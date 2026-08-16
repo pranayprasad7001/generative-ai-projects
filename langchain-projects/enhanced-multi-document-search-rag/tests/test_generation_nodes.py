@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from state.adaptive_state import AdaptiveRAGState
 from nodes.generation_nodes import GenerationNodes
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage
 
 

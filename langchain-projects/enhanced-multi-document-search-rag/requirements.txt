@@ -12,7 +12,6 @@ wikipedia
 unstructured
 langchain_experimental
 langchain_astradb
-rank_bm25
 pymupdf
 docx2txt
 openpyxl
@@ -21,7 +20,6 @@ msoffcrypto-tool
 langchain-cohere
 cohere
 langchain-mcp-adapters
-langchain-classic
 litellm[proxy]
 fastapi<=0.139.2
 langchain-openai
@@ -31,4 +29,4 @@ redis
 langchain_google_genai
 langchain_tavily
 pytest
-httpx
+httpx

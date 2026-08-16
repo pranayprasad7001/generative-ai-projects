@@ -623,7 +623,7 @@ def main():
                 <h4 style="color: #818cf8;">📄 Ingestion & Search</h4>
                 <ul>
                     <li><strong>Multi-Source:</strong> Loads Web URLs, PDFs, Word, Excel, CSV, TXT, and Markdown.</li>
-                    <li><strong>Ensemble Search:</strong> Blends Astra DB vector similarity with BM25 keyword matching.</li>
+                    <li><strong>Vector Search:</strong> Astra DB vector similarity search with Cohere cross-encoder reranking.</li>
                     <li><strong>Cohere Reranking:</strong> Refines context relevance using advanced cross-attention models.</li>
                     <li><strong>Smart Chunking:</strong> Supports standard Recursive Character or embedding-based Semantic/Hybrid chunking.</li>
                 </ul>

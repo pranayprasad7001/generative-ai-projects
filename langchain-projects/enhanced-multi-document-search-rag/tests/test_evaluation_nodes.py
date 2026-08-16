@@ -8,7 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 from state.adaptive_state import AdaptiveRAGState
 from nodes.evaluation_nodes import EvaluationNodes
 from nodes.schema import RetrievalGrade, HallucinationGrade, AnswerRelevanceGrade
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 
 
 class TestEvaluationNodes(unittest.IsolatedAsyncioTestCase):

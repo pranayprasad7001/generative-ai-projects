@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 from state.adaptive_state import AdaptiveRAGState
 from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
 from nodes.adaptive_node import AdaptiveRAGNodes
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, ToolMessage
 
 class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):

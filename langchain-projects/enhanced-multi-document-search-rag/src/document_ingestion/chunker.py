@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Union, Optional, Dict, Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from langchain_experimental.text_splitter import SemanticChunker
 
 logger = logging.getLogger(__name__)
@@ -127,7 +127,7 @@ class Chunker:
         )
         return new_docs
 
-    def split_documents(self, docs: Union[List[Document], str], file_type: str, strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
+    def split_documents(self, docs: Union[List[Document], str], file_type: str, strategy: Union[ChunkStrategy, str] = ChunkStrategy.RECURSIVE) -> List[Document]:
         """
         Split documents based on loader type and strategy
         

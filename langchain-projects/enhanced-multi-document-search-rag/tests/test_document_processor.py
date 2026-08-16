@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from document_ingestion.document_processor import DocumentProcessor
 from document_ingestion.chunker import ChunkStrategy
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 
 class TestDocumentProcessor(unittest.TestCase):
     def setUp(self):

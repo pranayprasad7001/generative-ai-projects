@@ -8,7 +8,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from document_ingestion.chunker import Chunker, ChunkStrategy
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 
 class TestChunker(unittest.TestCase):
     def setUp(self):

@@ -7,7 +7,7 @@ from typing import List, Union, Dict, Any, Optional
 from collections import defaultdict
 from pydantic import BaseModel, Field
 from .chunker import Chunker, ChunkStrategy
-from langchain_classic.schema import Document
+from langchain_core.documents import Document
 from bs4 import BeautifulSoup
 from langchain_community.document_loaders import (
     WebBaseLoader, 
