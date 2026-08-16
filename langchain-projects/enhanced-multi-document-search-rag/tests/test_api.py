@@ -1,11 +1,15 @@
+import os
+import sys
+from pathlib import Path
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
-import sys
-import os
 
-# Add root to sys.path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
+# Ensure repository root and src directory are on sys.path
+REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(REPO_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from fastapi.testclient import TestClient
 from api import app

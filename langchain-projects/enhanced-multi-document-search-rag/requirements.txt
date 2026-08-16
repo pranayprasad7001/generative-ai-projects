@@ -29,3 +29,5 @@ redisvl
 redis
 langchain_google_genai
 langchain_tavily
+pytest
+httpx
