@@ -1,5 +1,6 @@
 """Langgraph nodes for RAG workflow + Agent inside generate_content"""
 
+import inspect
 import logging
 import re
 from typing import List
@@ -15,6 +16,7 @@ from prompts.rag_prompts import (
     RETRIEVAL_GRADER_SYSTEM_PROMPT,
     QUESTION_REWRITER_SYSTEM_PROMPT,
     GENERATOR_SYSTEM_PROMPT,
+    GENERATOR_REGENERATION_SYSTEM_PROMPT,
     HALLUCINATION_DETECTOR_SYSTEM_PROMPT,
     ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT
 )
@@ -82,16 +84,17 @@ class AdaptiveRAGNodes:
         content = last_message.content if hasattr(last_message, "content") else str(last_message)
         content_clean = content.strip().upper()
 
-        if "BLOCKED" in content_clean:
+        if "BLOCKED" in content_clean or content_clean.startswith("UNSAFE"):
             logger.warning("Input query blocked by security guardrail.")
             state.query_blocked = True
             state.answer = "I cannot process this request. Please rephrase your question."
-        elif "SAFE" in content_clean:
+        elif "SAFE" in content_clean or "PASSED" in content_clean:
             logger.info("Input query passed security check.")
             state.query_blocked = False
         else:
-            # If model returned anything unexpected, check if it's explicitly denying
-            if any(term in content_clean for term in ["CANNOT", "SORRY", "NOT SAFE", "VIOLAT"]):
+            # Check for explicit safety denial phrasing only
+            denial_patterns = ["REQUEST IS UNSAFE", "DENIED", "ACCESS DENIED", "POLICY VIOLATION DETECTED"]
+            if any(pattern in content_clean for pattern in denial_patterns):
                 logger.warning("Input query denied by safety guardrail agent.")
                 state.query_blocked = True
                 state.answer = "I cannot process this request. Please rephrase your question."
@@ -143,7 +146,7 @@ class AdaptiveRAGNodes:
 
         return state
 
-    def query_analyzer(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+    async def query_analyzer(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
         Analyze the query and determine which direction to route
 
@@ -163,7 +166,7 @@ class AdaptiveRAGNodes:
             ("human", "{question}")
         ])
 
-        response = self.llm_checker.with_structured_output(ToolUse).invoke(
+        response = await self.llm_checker.with_structured_output(ToolUse).ainvoke(
             prompt.format_messages(question=state.question)
         )
 
@@ -185,9 +188,6 @@ class AdaptiveRAGNodes:
         """
         logger.info("Executing external search.")
         logger.debug("External search query: %s", state.question)
-        if state.retrieved_docs:
-            state.retrieved_docs = []
-            logger.info("Cleared retrieved docs before external search.")
 
         if self.external_search_agent is None:
             logger.info("Initializing combined guardrail agent lazily for external search...")
@@ -251,16 +251,25 @@ class AdaptiveRAGNodes:
         logger.info("External search completed. Answer length: %d, Citations found: %d", len(answer), len(citations))
         return state
 
-    def vector_search(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+    async def vector_search(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Perform vector search to find relevant documents."""
         logger.info("Executing vector search.")
         logger.debug("Vector search query: %s", state.question)
-        retrieved_documents: List[Document] = self.retriever.invoke(state.question)
+        if hasattr(self.retriever, "ainvoke"):
+            res = self.retriever.ainvoke(state.question)
+            if inspect.isawaitable(res):
+                retrieved_documents: List[Document] = await res
+            elif isinstance(res, list):
+                retrieved_documents = res
+            else:
+                retrieved_documents = self.retriever.invoke(state.question)
+        else:
+            retrieved_documents: List[Document] = self.retriever.invoke(state.question)
         state.retrieved_docs = retrieved_documents
         logger.info("Vector search retrieved %d documents", len(retrieved_documents))
         return state
 
-    def documents_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+    async def documents_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Grade the relevance and sufficiency of retrieved documents."""
         logger.info("Grading %d retrieved documents.", len(state.retrieved_docs))
         logger.debug("Grading documents for query: %s", state.question)
@@ -284,9 +293,9 @@ class AdaptiveRAGNodes:
             for i, doc in enumerate(state.retrieved_docs, start=1)
         )
 
-        response = self.llm_checker.with_structured_output(
+        response = await self.llm_checker.with_structured_output(
             RetrievalGrade
-        ).invoke(
+        ).ainvoke(
             prompt.format_messages(
                 question=state.question,
                 documents=documents,
@@ -299,29 +308,43 @@ class AdaptiveRAGNodes:
         logger.debug("Retrieval grader reasoning: %s", state.analysis)
         return state
     
-    def query_rewriter(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+    async def query_rewriter(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
-        Rewrite the user's question to improve retrieval accuracy
+        Rewrite the user's question to improve retrieval accuracy and resolve conversational coreferences.
         """
         logger.info("Rewriting question.")
         logger.debug("Original question: %s, Current question: %s", state.original_question, state.question)
 
+        chat_history_str = "No previous conversation history."
+        if state.messages:
+            lines = []
+            for msg in state.messages[-6:]:
+                role = "User" if getattr(msg, "type", "") == "human" else "Assistant"
+                lines.append(f"{role}: {getattr(msg, 'content', str(msg))}")
+            if lines:
+                chat_history_str = "\n".join(lines)
+
         prompt = ChatPromptTemplate.from_messages([
-        ("system", QUESTION_REWRITER_SYSTEM_PROMPT),
-        (
-            "human",
-            """
-            Original Question:
-            {original_question}
+            ("system", QUESTION_REWRITER_SYSTEM_PROMPT),
+            (
+                "human",
+                """
+                Conversation History:
+                {chat_history}
 
-            Current Question:
-            {current_question}
-            """
-        )])
+                Original Question:
+                {original_question}
 
-        response = self.llm_checker.with_structured_output(QuestionRewrite).invoke(
+                Current Question:
+                {current_question}
+                """
+            )
+        ])
+
+        response = await self.llm_checker.with_structured_output(QuestionRewrite).ainvoke(
             prompt.format_messages(
-                original_question=state.original_question,
+                chat_history=chat_history_str,
+                original_question=state.original_question or state.question,
                 current_question=state.question,
             )
         )
@@ -335,16 +358,96 @@ class AdaptiveRAGNodes:
         logger.debug("Rewritten question content: %s", state.question)
         return state
 
-    def answer_generator(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
-        """Generate answer based on retrieved documents."""
+    async def answer_generator(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+        """Generate or regenerate answer based on retrieved documents and self-correction critique."""
         logger.info("Generating answer. Generate count: %d", state.generate_count + 1)
 
-        documents_content: str = "\n\n".join(
-            doc.page_content for doc in state.retrieved_docs
-        )
+        context_sections = []
+        if state.retrieved_docs:
+            doc_str = "\n\n".join(
+                f"[Document {i}]\n{doc.page_content}"
+                for i, doc in enumerate(state.retrieved_docs, start=1)
+            )
+            context_sections.append(f"Retrieved Documents:\n{doc_str}")
+        if state.external_results:
+            context_sections.append(f"External Search Results:\n{state.external_results}")
+
+        documents_content: str = "\n\n".join(context_sections) if context_sections else "No relevant documents found."
+
+        # Self-correction regeneration branch if previously flagged for hallucination
+        if state.generate_count > 0 and state.hallucination_grade == "no" and state.analysis:
+            logger.info("Executing critique-aware self-correction answer regeneration.")
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", GENERATOR_REGENERATION_SYSTEM_PROMPT),
+                (
+                    "human",
+                    """
+                    User Question:
+                    {question}
+
+                    Retrieved Context:
+                    {context}
+
+                    Previous Draft Answer:
+                    {previous_answer}
+
+                    Hallucination Critique & Feedback:
+                    {critique}
+                    """
+                ),
+            ])
+            response = await self.llm_generator.bind(
+                extra_body={"cache": {"use-cache": False}}
+            ).ainvoke(
+                prompt.format_messages(
+                    question=state.question,
+                    context=documents_content,
+                    previous_answer=state.answer,
+                    critique=state.analysis
+                )
+            )
+        else:
+            prompt = ChatPromptTemplate.from_messages([
+                ("system", GENERATOR_SYSTEM_PROMPT),
+                (
+                    "human",
+                    """
+                    User Question:
+                    {question}
+
+                    Retrieved Documents:
+                    {documents}
+                    """
+                ),
+            ])
+
+            response = await self.llm_generator.bind(
+                extra_body={"cache": {"use-cache": True, "ttl": 1800}}
+            ).ainvoke(prompt.format_messages(question=state.question, documents=documents_content))
+
+        state.answer = response.content
+        state.generate_count += 1
+        logger.info("Answer generated successfully. Total generations: %d", state.generate_count)
+        return state
+
+    async def hallucination_detector(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+        """Detects hallucinations in the generated answer against both local docs and external search results."""
+        logger.debug("Running hallucination check for generated answer.")
+
+        context_sections = []
+        if state.retrieved_docs:
+            doc_str = "\n\n".join(
+                f"[Document {i}]\n{doc.page_content}"
+                for i, doc in enumerate(state.retrieved_docs, start=1)
+            )
+            context_sections.append(f"Retrieved Documents:\n{doc_str}")
+        if state.external_results:
+            context_sections.append(f"External Search Results:\n{state.external_results}")
+
+        documents_content: str = "\n\n".join(context_sections) if context_sections else "No relevant context provided."
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", GENERATOR_SYSTEM_PROMPT),
+            ("system", HALLUCINATION_DETECTOR_SYSTEM_PROMPT),
             (
                 "human",
                 """
@@ -353,45 +456,14 @@ class AdaptiveRAGNodes:
 
                 Retrieved Documents:
                 {documents}
+
+                Generated Answer:
+                {answer}
                 """
             ),
         ])
-
-        response = self.llm_generator.bind(
-            extra_body={"cache": {"use-cache": True, "ttl": 1800}}
-        ).invoke(prompt.format_messages(question=state.question, documents=documents_content))
-        state.answer = response.content
-        state.generate_count += 1
-        logger.info("Answer generated successfully.")
-        return state
-
-    def hallucination_detector(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
-        """Detects hallucinations in the generated answer."""
-        logger.debug("Running hallucination check for generated answer.")
-
-        documents_content: str = "\n\n".join(
-            f"[Document {i}]\n{doc.page_content}"
-            for i, doc in enumerate(state.retrieved_docs, start=1)
-        )
-
-        prompt = ChatPromptTemplate.from_messages([
-        ("system", HALLUCINATION_DETECTOR_SYSTEM_PROMPT),
-        (
-            "human",
-            """
-            User Question:
-            {question}
-
-            Retrieved Documents:
-            {documents}
-
-            Generated Answer:
-            {answer}
-            """
-        ),
-        ])
         
-        response = self.llm_checker.with_structured_output(HallucinationGrade).invoke(
+        response = await self.llm_checker.with_structured_output(HallucinationGrade).ainvoke(
             prompt.format_messages(question=state.question, documents=documents_content, answer=state.answer))
 
         state.hallucination_grade = response.grade
@@ -400,7 +472,7 @@ class AdaptiveRAGNodes:
         logger.debug("Hallucination check reasoning: %s", state.analysis)
         return state
 
-    def answer_relevance_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
+    async def answer_relevance_grader(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Grades answer relevance to the question."""
         logger.debug("Running answer relevance check.")
 
@@ -418,7 +490,7 @@ class AdaptiveRAGNodes:
         ),
         ])
 
-        response = self.llm_checker.with_structured_output(AnswerRelevanceGrade).invoke(
+        response = await self.llm_checker.with_structured_output(AnswerRelevanceGrade).ainvoke(
             prompt.format_messages(question=state.question, answer=state.answer)
         )
 
@@ -465,6 +537,8 @@ class AdaptiveRAGNodes:
         if state.hallucination_grade == "yes":
             return "answer_relevance_grader"
         if state.generate_count >= Config.MAX_GENERATIONS:
+            if state.tool_type == "external_search" or state.external_results:
+                return "output_answer_security_check"
             return "external_search"
         return "answer_generator"
 
@@ -475,9 +549,8 @@ class AdaptiveRAGNodes:
         logger.info("Routing from relevance grader. Grade: %s, Rewrite count: %d", state.answer_relevance_grade, state.rewrite_count)
         if state.answer_relevance_grade == "yes":
             return "output_answer_security_check"
-        if state.rewrite_count >= Config.MAX_REWRITES:
+        if state.rewrite_count >= Config.MAX_REWRITES or state.tool_type == "external_search" or state.external_results:
+            if state.tool_type == "external_search" or state.external_results:
+                return "output_answer_security_check"
             return "external_search"
         return "query_rewriter"
-
-    
-    

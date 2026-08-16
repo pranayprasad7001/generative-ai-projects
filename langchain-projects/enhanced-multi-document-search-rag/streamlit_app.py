@@ -20,6 +20,7 @@ logging.basicConfig(
 # Add src to path
 sys.path.append(str(Path(__file__).parent / "src"))
 
+from langchain_core.messages import HumanMessage, AIMessage
 from config.llmgateway_config import Config
 from document_ingestion.document_processor import DocumentProcessor
 from document_ingestion.chunker import ChunkStrategy
@@ -30,6 +31,19 @@ from graph_builder.adaptive_graph_builder import GraphBuilder
 LANGSMITH_TRACING = Config.LANGSMITH_TRACING
 LANGSMITH_API_KEY = Config.LANGSMITH_API_KEY
 LANGSMITH_PROJECT = Config.LANGSMITH_PROJECT
+
+
+def run_async(coro):
+    """Run an async coroutine on a persistent background thread event loop to prevent connection pool leaks."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        return asyncio.run(coro)
 
 
 def format_cost(cost: float) -> str:
@@ -446,8 +460,20 @@ def main():
                             k=top_k,
                             search_type=search_type
                         )
-                        
-                        result = asyncio.run(st.session_state.rag_system.run(question))
+
+                        # Construct past conversation history messages
+                        history_messages = []
+                        for item in st.session_state.history[-4:]:
+                            history_messages.append(HumanMessage(content=item['question']))
+                            history_messages.append(AIMessage(content=item['answer']))
+
+                        result = run_async(
+                            st.session_state.rag_system.run(
+                                question,
+                                thread_id="streamlit_session",
+                                messages=history_messages
+                            )
+                        )
                         elapsed_time = time.time() - start_time
                         cost = result.get('total_cost', 0.0)
                         

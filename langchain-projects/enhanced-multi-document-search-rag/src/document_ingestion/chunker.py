@@ -87,25 +87,29 @@ class Chunker:
             }
 
         existing_metadata = existing_metadata or {}
+        new_docs = []
 
         for index, doc in enumerate(docs):
-            doc.metadata = {
+            doc_meta = getattr(doc, "metadata", {}) or {}
+            meta = {
                 **base_metadata,
                 **existing_metadata,
-                **doc.metadata,
+                **doc_meta,
                 **extra_metadata,
             }
 
             if add_chunk:
-                doc.metadata["chunk"] = index
+                meta["chunk"] = index
+
+            new_docs.append(Document(page_content=doc.page_content, metadata=meta))
 
         logger.info(
             "Added metadata for %d document(s) from source '%s' (loader=%s)",
-            len(docs),
+            len(new_docs),
             source,
             loader_name
         )
-        return docs
+        return new_docs
 
     def split_documents(self, docs: Union[List[Document], str], file_type: str, strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
         """

@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from state.adaptive_state import AdaptiveRAGState
+from langchain_core.messages import HumanMessage
 
 class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
 
@@ -98,6 +99,32 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["question"], "What is AI?")
         self.assertIn("error occurred during request processing", result["answer"])
         self.assertEqual(result["total_cost"], 0.0)
+
+    def test_clear_checkpointer(self):
+        self.builder.build_graph(use_checkpointer=True)
+        old_checkpointer = self.builder.checkpointer
+        self.builder.clear_checkpointer()
+        self.assertIsNot(self.builder.checkpointer, old_checkpointer)
+
+    @patch("graph_builder.adaptive_graph_builder.CostTrackingCallbackHandler")
+    async def test_run_with_history_messages(self, mock_callback_class):
+        mock_callback = MagicMock()
+        mock_callback.total_cost = 0.0
+        mock_callback_class.return_value = mock_callback
+
+        self.builder.build_graph(use_checkpointer=False)
+        mock_graph = AsyncMock()
+        mock_graph.ainvoke.return_value = {
+            "question": "Follow up",
+            "answer": "Answer with history",
+            "retrieved_docs": [],
+            "external_citations": []
+        }
+        self.builder.graph = mock_graph
+
+        history = [HumanMessage(content="Initial question")]
+        result = await self.builder.run("Follow up", messages=history)
+        self.assertEqual(result["answer"], "Answer with history")
 
 if __name__ == "__main__":
     unittest.main()

@@ -149,8 +149,8 @@ class Config:
     LLM_CHECKER_MAX_TOKENS = 2048
     LLM_RATE_LIMITER = 0.5
     MAX_RETRIES = 1
-    EMBEDDING_RATE_LIMITER = 0.25
-    EMBEDDING_BATCH_SIZE = 10
+    EMBEDDING_RATE_LIMITER = float(os.getenv("EMBEDDING_RATE_LIMITER", "5.0"))
+    EMBEDDING_BATCH_SIZE = 20
 
     # Singleton Rate Limiters
     _llm_rate_limiter: InMemoryRateLimiter | None = None
@@ -168,7 +168,7 @@ class Config:
         if cls._llm_rate_limiter is None:
             cls._llm_rate_limiter = InMemoryRateLimiter(
                 requests_per_second=cls.LLM_RATE_LIMITER,
-                max_bucket_size=1
+                max_bucket_size=2
             )
         return cls._llm_rate_limiter
 
@@ -178,7 +178,7 @@ class Config:
         if cls._embedding_rate_limiter is None:
             cls._embedding_rate_limiter = InMemoryRateLimiter(
                 requests_per_second=cls.EMBEDDING_RATE_LIMITER,
-                max_bucket_size=1
+                max_bucket_size=10
             )
         return cls._embedding_rate_limiter
 

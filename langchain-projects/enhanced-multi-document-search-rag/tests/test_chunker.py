@@ -89,6 +89,19 @@ class TestChunker(unittest.TestCase):
         split_docs = chunker_with_embed.split_documents(docs, ".txt", ChunkStrategy.SEMANTIC)
         self.assertTrue(len(split_docs) >= 1)
 
+    def test_add_metadata_immutability(self):
+        original_meta = {"original_tag": "tag1"}
+        doc = Document(page_content="Content", metadata=original_meta)
+        updated_docs = self.chunker.add_metadata(
+            docs=[doc],
+            source="test_source",
+            loader_name="TestLoader",
+            add_chunk=True
+        )
+        self.assertEqual(len(updated_docs), 1)
+        self.assertIn("chunk", updated_docs[0].metadata)
+        self.assertNotIn("chunk", original_meta)
+
     def test_invalid_strategy(self):
         docs = [Document(page_content="some text")]
         with self.assertRaises(ValueError):

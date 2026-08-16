@@ -112,7 +112,7 @@ class GraphBuilder:
             },
         )
 
-        builder.add_edge("external_search", "output_answer_security_check")
+        builder.add_edge("external_search", "hallucination_detector")
         builder.add_edge("output_answer_security_check", END)
 
         # Compile the graph
@@ -123,13 +123,26 @@ class GraphBuilder:
         logger.info("StateGraph workflow successfully compiled.")
         return self.graph
 
-    async def run(self, question: str, thread_id: Optional[str] = None) -> dict:
+    def clear_checkpointer(self):
+        """Reset in-memory checkpointer state to prevent memory growth."""
+        self.checkpointer = InMemorySaver()
+        if self.graph is not None:
+            self.build_graph()
+        logger.info("Checkpointer state cleared.")
+
+    async def run(
+        self,
+        question: str,
+        thread_id: Optional[str] = None,
+        messages: Optional[list] = None
+    ) -> dict:
         """
-        Run the Adaptive RAG workflow with a question
+        Run the Adaptive RAG workflow with a question and optional conversation history
 
         Args:
             question: Question to ask
-            thread_id: Optional thread identifier (generates a unique UUID4 if omitted)
+            thread_id: Optional thread identifier (defaults to 'default_session')
+            messages: Optional list of past BaseMessages for multi-turn history
 
         Returns:
             Dictionary with answer and other details
@@ -140,15 +153,19 @@ class GraphBuilder:
             )
             self.build_graph()
 
-        resolved_thread_id = thread_id or str(uuid.uuid4())
+        resolved_thread_id = thread_id or "default_session"
 
         logger.info(
-            "Running Adaptive RAG workflow for query: %s (thread_id: %s)",
+            "Running Adaptive RAG workflow for query: %s (thread_id: %s, history_messages: %d)",
             repr(question),
-            resolved_thread_id
+            resolved_thread_id,
+            len(messages) if messages else 0
         )
 
-        initial_state = AdaptiveRAGState(question=question)
+        initial_state = AdaptiveRAGState(
+            question=question,
+            messages=messages or []
+        )
         cost_callback = CostTrackingCallbackHandler()
 
         try:

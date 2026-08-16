@@ -58,17 +58,35 @@ class DocumentProcessor:
 
     def load_from_url(self, url: str, strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
         """
-        Load documents from a URL
+        Load documents from a URL with DOM cleaning to remove script, style, nav, and footers.
         Args:
             url (str): URL to load documents from
             strategy (str): Chunking strategy to use
         Returns:
-            List[Document]: List of documents
+            List[Document]: List of cleaned documents
         """
         docs = WebBaseLoader(url).load()
-        split_docs = self.chunker.split_documents(docs, "url", strategy=strategy)
+        cleaned_docs = []
+        for doc in docs:
+            text = doc.page_content
+            try:
+                from bs4 import BeautifulSoup
+                soup = BeautifulSoup(text, "html.parser")
+                for element in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
+                    element.decompose()
+                clean_text = soup.get_text(separator="\n\n")
+            except Exception:
+                clean_text = text
+
+            lines = [line.strip() for line in clean_text.splitlines() if line.strip()]
+            normalized_text = "\n".join(lines)
+            if normalized_text:
+                cleaned_docs.append(Document(page_content=normalized_text, metadata=doc.metadata))
+
+        target_docs = cleaned_docs if cleaned_docs else docs
+        split_docs = self.chunker.split_documents(target_docs, "url", strategy=strategy)
         docs_with_metadata = self.chunker.add_metadata(docs=split_docs, source=url, loader_name="WebBaseLoader", add_chunk=True)
-        logger.info("Loaded %d chunks from %s", len(docs_with_metadata), url)
+        logger.info("Loaded %d clean chunks from %s", len(docs_with_metadata), url)
         return docs_with_metadata
 
     def load_from_pdf(self, file_path: Union[str, Path], strategy: ChunkStrategy = ChunkStrategy.RECURSIVE) -> List[Document]:
