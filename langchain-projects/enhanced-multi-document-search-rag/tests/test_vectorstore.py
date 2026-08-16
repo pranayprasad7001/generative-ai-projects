@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from langchain_classic.schema import Document
+from vectorstore.vectorstore import VectorStoreManager, compute_chunk_identity
 
 class TestVectorStoreManager(unittest.TestCase):
     
@@ -19,7 +20,6 @@ class TestVectorStoreManager(unittest.TestCase):
         self.mock_cohere = mock_cohere
         
         # Instantiate VectorStoreManager
-        from vectorstore.vectorstore import VectorStoreManager
         self.manager = VectorStoreManager()
 
     def test_init(self):
@@ -41,10 +41,8 @@ class TestVectorStoreManager(unittest.TestCase):
 
     def test_add_documents_to_vectorstore_duplicates(self):
         mock_collection = MagicMock()
-        # Simulate that documents already exist
-        import hashlib
         doc = Document(page_content="test page", metadata={"source": "test.txt"})
-        doc_id = hashlib.sha256(f"test.txt_test page".encode("utf-8")).hexdigest()
+        doc_id = compute_chunk_identity(doc)
         mock_collection.find.return_value = [{"_id": doc_id}]
         self.manager.vectorstore.astra_env.collection = mock_collection
 
@@ -52,6 +50,31 @@ class TestVectorStoreManager(unittest.TestCase):
 
         mock_collection.find.assert_called_once()
         self.manager.vectorstore.add_documents.assert_not_called()
+
+    def test_compute_chunk_identity_dimensions(self):
+        doc_base = Document(page_content="Hello world", metadata={"source": "doc.pdf", "doc_version": "v1", "chunk_strategy": "recursive", "chunk_size": 500, "chunk_overlap": 50, "chunk": 0})
+        base_id = compute_chunk_identity(doc_base)
+
+        # 1. Same metadata produces identical hash
+        doc_same = Document(page_content="Hello world", metadata={"source": "doc.pdf", "doc_version": "v1", "chunk_strategy": "recursive", "chunk_size": 500, "chunk_overlap": 50, "chunk": 0})
+        self.assertEqual(base_id, compute_chunk_identity(doc_same))
+
+        # 2. Different document version produces different hash
+        doc_v2 = Document(page_content="Hello world", metadata={"source": "doc.pdf", "doc_version": "v2", "chunk_strategy": "recursive", "chunk_size": 500, "chunk_overlap": 50, "chunk": 0})
+        self.assertNotEqual(base_id, compute_chunk_identity(doc_v2))
+
+        # 3. Different chunking strategy produces different hash
+        doc_semantic = Document(page_content="Hello world", metadata={"source": "doc.pdf", "doc_version": "v1", "chunk_strategy": "semantic", "chunk_size": 500, "chunk_overlap": 50, "chunk": 0})
+        self.assertNotEqual(base_id, compute_chunk_identity(doc_semantic))
+
+        # 4. Different chunk size produces different hash
+        doc_larger_chunk = Document(page_content="Hello world", metadata={"source": "doc.pdf", "doc_version": "v1", "chunk_strategy": "recursive", "chunk_size": 1000, "chunk_overlap": 50, "chunk": 0})
+        self.assertNotEqual(base_id, compute_chunk_identity(doc_larger_chunk))
+
+        # 5. Different embedding model produces different hash
+        id_emb1 = compute_chunk_identity(doc_base, default_embedding_model="gemini-embedding-2")
+        id_emb2 = compute_chunk_identity(doc_base, default_embedding_model="text-embedding-3-small")
+        self.assertNotEqual(id_emb1, id_emb2)
 
     @patch("vectorstore.vectorstore.BM25Retriever")
     @patch("vectorstore.vectorstore.EnsembleRetriever")

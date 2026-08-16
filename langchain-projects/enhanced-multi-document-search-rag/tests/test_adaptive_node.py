@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from state.adaptive_state import AdaptiveRAGState
 from nodes.schema import ToolUse, RetrievalGrade, QuestionRewrite, HallucinationGrade, AnswerRelevanceGrade
+from nodes.adaptive_node import AdaptiveRAGNodes
 from langchain_classic.schema import Document
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -26,8 +27,6 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
         self.mock_retriever = MagicMock()
         self.mock_llm = MagicMock()
         
-        # Instantiate AdaptiveRAGNodes
-        from nodes.adaptive_node import AdaptiveRAGNodes
         self.nodes = AdaptiveRAGNodes(self.mock_retriever, self.mock_llm)
 
     async def test_input_query_security_check_pass(self):
@@ -78,27 +77,45 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updated_state.answer, "Safe rewritten answer")
         self.mock_output_agent.ainvoke.assert_called_once()
 
+    async def test_output_answer_security_check_fail_closed(self):
+        self.mock_output_agent.ainvoke.side_effect = Exception("Guardrail service unavailable")
+        state = AdaptiveRAGState(question="query", answer="original answer")
+        updated_state = await self.nodes.output_answer_security_check(state)
+        self.assertIn("could not be verified", updated_state.answer)
+
     async def test_query_analyzer(self):
         mock_structured_llm = MagicMock()
-        mock_structured_llm.ainvoke = AsyncMock(return_value=ToolUse(tool_type="vector_search", analysis="Needs DB search"))
+        mock_structured_llm.ainvoke = AsyncMock(return_value=ToolUse(tool_type="hybrid_retrieval", analysis="Needs DB search"))
         self.mock_llm.with_structured_output.return_value = mock_structured_llm
 
         state = AdaptiveRAGState(question="What is LangGraph?")
         updated_state = await self.nodes.query_analyzer(state)
 
-        self.assertEqual(updated_state.tool_type, "vector_search")
+        self.assertEqual(updated_state.tool_type, "hybrid_retrieval")
         self.assertEqual(updated_state.analysis, "Needs DB search")
         self.mock_llm.with_structured_output.assert_called_once_with(ToolUse)
 
-    async def test_vector_search(self):
+    async def test_hybrid_retrieval(self):
         docs = [Document(page_content="LangGraph is cool")]
         self.mock_retriever.invoke.return_value = docs
 
         state = AdaptiveRAGState(question="What is LangGraph?")
-        updated_state = await self.nodes.vector_search(state)
+        updated_state = await self.nodes.hybrid_retrieval(state)
 
         self.assertEqual(updated_state.retrieved_docs, docs)
         self.mock_retriever.invoke.assert_called_once_with("What is LangGraph?")
+
+    async def test_hybrid_retrieval_with_config_retriever(self):
+        docs = [Document(page_content="Dynamic Retriever Result")]
+        custom_retriever = MagicMock()
+        custom_retriever.invoke.return_value = docs
+
+        state = AdaptiveRAGState(question="What is LangGraph?")
+        config = {"configurable": {"retriever": custom_retriever}}
+        updated_state = await self.nodes.hybrid_retrieval(state, config=config)
+
+        self.assertEqual(updated_state.retrieved_docs, docs)
+        custom_retriever.invoke.assert_called_once_with("What is LangGraph?")
 
     async def test_documents_grader(self):
         mock_structured_llm = MagicMock()
@@ -161,7 +178,6 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
         """Verify that llm_checker is used for evaluation and llm_generator for answer generation."""
         mock_generator = MagicMock()
         mock_checker = MagicMock()
-        from nodes.adaptive_node import AdaptiveRAGNodes
         dual_nodes = AdaptiveRAGNodes(self.mock_retriever, llm_generator=mock_generator, llm_checker=mock_checker)
 
         # 1. Check query_analyzer calls mock_checker
@@ -184,8 +200,8 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
         mock_generator.bind.assert_called_once()
 
     def test_query_router(self):
-        state_vector = AdaptiveRAGState(question="query", tool_type="vector_search")
-        self.assertEqual(self.nodes.query_router(state_vector), "vector_search")
+        state_vector = AdaptiveRAGState(question="query", tool_type="hybrid_retrieval")
+        self.assertEqual(self.nodes.query_router(state_vector), "hybrid_retrieval")
 
         state_external = AdaptiveRAGState(question="query", tool_type="external_search")
         self.assertEqual(self.nodes.query_router(state_external), "external_search")
@@ -257,7 +273,8 @@ class TestAdaptiveRAGNodes(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(updated_state.retrieved_docs, initial_docs)
         self.assertEqual(updated_state.external_results, "External summary of AI.")
-        self.assertIn("https://en.wikipedia.org/wiki/AI", updated_state.external_citations)
+        citation_urls = [c["url"] if isinstance(c, dict) else c for c in updated_state.external_citations]
+        self.assertIn("https://en.wikipedia.org/wiki/AI", citation_urls)
 
     async def test_hallucination_detector_with_external_results(self):
         """Test that hallucination_detector includes external_results in context."""

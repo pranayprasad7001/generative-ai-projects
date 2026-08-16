@@ -28,3 +28,4 @@ torchvision
 redisvl
 redis
 langchain_google_genai
+langchain_tavily

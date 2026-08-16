@@ -6,6 +6,7 @@ from typing import List, Union
 from .chunker import Chunker, ChunkStrategy
 from collections import defaultdict
 from langchain_classic.schema import Document
+from bs4 import BeautifulSoup
 from langchain_community.document_loaders import (
     WebBaseLoader, 
     PyMuPDFLoader, 
@@ -70,12 +71,12 @@ class DocumentProcessor:
         for doc in docs:
             text = doc.page_content
             try:
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(text, "html.parser")
                 for element in soup(["script", "style", "nav", "footer", "header", "aside", "noscript"]):
                     element.decompose()
                 clean_text = soup.get_text(separator="\n\n")
-            except Exception:
+            except Exception as e:
+                logger.debug("HTML cleaning error for %s: %s", url, e)
                 clean_text = text
 
             lines = [line.strip() for line in clean_text.splitlines() if line.strip()]

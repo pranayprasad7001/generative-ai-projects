@@ -1,16 +1,27 @@
-"""Chunking documents"""
+"""Document Chunking and Text Splitting Module.
+
+This module provides multi-strategy document splitting:
+- Recursive character splitting with configurable chunk size and overlap
+- Markdown header-aware splitting preserving document hierarchy
+- Experimental semantic chunking based on embedding distance breaks
+- Hybrid splitting combining structural headers, semantic chunking, and character windows
+- Automatic stamping of 5-dimension identity and version metadata
+"""
 
 from enum import Enum
 import logging
 from pathlib import Path
-from typing import List, Union
+from typing import List, Union, Optional, Dict, Any
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownHeaderTextSplitter
 from langchain_classic.schema import Document
 from langchain_experimental.text_splitter import SemanticChunker
 
 logger = logging.getLogger(__name__)
 
+
 class ChunkStrategy(Enum):
+    """Supported document chunking strategies."""
     RECURSIVE = "recursive"
     SEMANTIC = "semantic"
     HYBRID = "hybrid"
@@ -92,6 +103,9 @@ class Chunker:
         for index, doc in enumerate(docs):
             doc_meta = getattr(doc, "metadata", {}) or {}
             meta = {
+                "chunk_size": self.chunk_size,
+                "chunk_overlap": self.chunk_overlap,
+                "doc_version": "v1",
                 **base_metadata,
                 **existing_metadata,
                 **doc_meta,
@@ -100,6 +114,7 @@ class Chunker:
 
             if add_chunk:
                 meta["chunk"] = index
+                meta["chunk_index"] = index
 
             new_docs.append(Document(page_content=doc.page_content, metadata=meta))
 
@@ -177,6 +192,15 @@ class Chunker:
                 logger.debug("Recursive splitting started...")
                 split_docs = self.recursive_text_splitter.split_documents(docs)
         
+        # Stamp chunk_strategy and chunk_index on split chunks
+        for i, doc in enumerate(split_docs):
+            if hasattr(doc, "metadata") and isinstance(doc.metadata, dict):
+                doc.metadata.setdefault("chunk_strategy", strategy.value)
+                doc.metadata.setdefault("chunk_size", self.chunk_size)
+                doc.metadata.setdefault("chunk_overlap", self.chunk_overlap)
+                doc.metadata.setdefault("chunk", i)
+                doc.metadata.setdefault("chunk_index", i)
+
         logger.info("Generated %d chunks from document splitting.", len(split_docs))
         return split_docs
 

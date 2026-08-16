@@ -56,9 +56,9 @@ class TestRAGIntegrationWorkflows(unittest.IsolatedAsyncioTestCase):
         # 1. Input Guardrail: SAFE
         self.mock_input_agent.ainvoke.return_value = {"messages": [AIMessage(content="SAFE")]}
 
-        # 2. Query Analyzer: vector_search
+        # 2. Query Analyzer: hybrid_retrieval
         mock_analyzer = MagicMock()
-        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="vector_search", analysis="Local DB query"))
+        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="hybrid_retrieval", analysis="Local DB query"))
 
         # 3. Documents Grader: yes
         mock_doc_grader = MagicMock()
@@ -106,15 +106,20 @@ class TestRAGIntegrationWorkflows(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("LangGraph builds stateful", result.get("answer", ""))
         self.assertEqual(len(result.get("retrieved_docs", [])), 1)
+        self.assertIn("total", result.get("latency_breakdown", {}))
+        self.assertIn("query_analysis", result.get("latency_breakdown", {}))
+        self.assertIn("hybrid_retrieval", result.get("latency_breakdown", {}))
+        self.assertIn("generation", result.get("latency_breakdown", {}))
+        self.assertGreaterEqual(result.get("total_latency", 0.0), 0.0)
 
     async def test_multi_turn_conversational_coreference_flow(self):
         """Test that conversation history is passed and query rewriter resolves pronouns."""
         # 1. Input Guardrail: SAFE
         self.mock_input_agent.ainvoke.return_value = {"messages": [AIMessage(content="SAFE")]}
 
-        # 2. Query Analyzer: vector_search
+        # 2. Query Analyzer: hybrid_retrieval
         mock_analyzer = MagicMock()
-        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="vector_search", analysis="Local DB search"))
+        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="hybrid_retrieval", analysis="Local DB search"))
 
         # 3. Documents Grader: first "no" (triggers rewriter), then "yes"
         mock_doc_grader = MagicMock()
@@ -177,9 +182,9 @@ class TestRAGIntegrationWorkflows(unittest.IsolatedAsyncioTestCase):
         # 1. Input Guardrail: SAFE
         self.mock_input_agent.ainvoke.return_value = {"messages": [AIMessage(content="SAFE")]}
 
-        # 2. Query Analyzer: vector_search
+        # 2. Query Analyzer: hybrid_retrieval
         mock_analyzer = MagicMock()
-        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="vector_search", analysis="Local DB query"))
+        mock_analyzer.ainvoke = AsyncMock(return_value=ToolUse(tool_type="hybrid_retrieval", analysis="Local DB query"))
 
         # 3. Documents Grader: yes
         mock_doc_grader = MagicMock()

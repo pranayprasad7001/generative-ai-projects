@@ -1,6 +1,7 @@
+import time
 import uuid
 import logging
-from typing import Optional
+from typing import Optional, Any
 from langgraph.graph import StateGraph, START, END
 from state.adaptive_state import AdaptiveRAGState
 from nodes.adaptive_node import AdaptiveRAGNodes
@@ -46,7 +47,7 @@ class GraphBuilder:
         # Add nodes
         builder.add_node("input_query_security_check", self.nodes.input_query_security_check)
         builder.add_node("query_analyzer", self.nodes.query_analyzer)
-        builder.add_node("vector_search", self.nodes.vector_search)
+        builder.add_node("hybrid_retrieval", self.nodes.hybrid_retrieval)
         builder.add_node("documents_grader", self.nodes.documents_grader)
         builder.add_node("query_rewriter", self.nodes.query_rewriter)
         builder.add_node("answer_generator", self.nodes.answer_generator)
@@ -71,12 +72,12 @@ class GraphBuilder:
             "query_analyzer",
             self.nodes.query_router,
             {
-                "vector_search": "vector_search",
+                "hybrid_retrieval": "hybrid_retrieval",
                 "external_search": "external_search",
             },
         )
 
-        builder.add_edge("vector_search", "documents_grader")
+        builder.add_edge("hybrid_retrieval", "documents_grader")
 
         builder.add_conditional_edges(
             "documents_grader",
@@ -88,7 +89,7 @@ class GraphBuilder:
             },
         )
 
-        builder.add_edge("query_rewriter", "vector_search")
+        builder.add_edge("query_rewriter", "hybrid_retrieval")
 
         builder.add_edge("answer_generator", "hallucination_detector")
 
@@ -134,7 +135,8 @@ class GraphBuilder:
         self,
         question: str,
         thread_id: Optional[str] = None,
-        messages: Optional[list] = None
+        messages: Optional[list] = None,
+        retriever: Optional[Any] = None
     ) -> dict:
         """
         Run the Adaptive RAG workflow with a question and optional conversation history
@@ -143,6 +145,7 @@ class GraphBuilder:
             question: Question to ask
             thread_id: Optional thread identifier (defaults to 'default_session')
             messages: Optional list of past BaseMessages for multi-turn history
+            retriever: Optional per-query retriever to avoid mutating shared graph state
 
         Returns:
             Dictionary with answer and other details
@@ -167,40 +170,56 @@ class GraphBuilder:
             messages=messages or []
         )
         cost_callback = CostTrackingCallbackHandler()
+        start_time = time.perf_counter()
+
+        configurable = {
+            "thread_id": resolved_thread_id
+        }
+        if retriever is not None:
+            configurable["retriever"] = retriever
 
         try:
             result = await self.graph.ainvoke(
                 initial_state,
                 config={
-                    "configurable": {
-                        "thread_id": resolved_thread_id
-                    },
+                    "configurable": configurable,
                     "callbacks": [cost_callback]
                 },
             )
 
-            # Update the result state with the calculated total cost
+            total_elapsed = round(time.perf_counter() - start_time, 4)
+
+            # Update the result state with total latency and cost
             if isinstance(result, dict):
                 result["total_cost"] = cost_callback.total_cost
+                result["total_latency"] = total_elapsed
+                breakdown = result.get("latency_breakdown", {})
+                breakdown["total"] = total_elapsed
+                result["latency_breakdown"] = breakdown
             elif hasattr(result, "total_cost"):
                 try:
                     result.total_cost = cost_callback.total_cost
+                    result.total_latency = total_elapsed
+                    result.latency_breakdown["total"] = total_elapsed
                 except Exception:
                     pass
 
             logger.info(
-                "Adaptive RAG workflow run completed successfully. Cumulative Cost: $%s",
+                "Adaptive RAG workflow run completed in %.3fs. Cumulative Cost: $%s",
+                total_elapsed,
                 cost_callback.total_cost,
             )
             return result
 
         except Exception as e:
             logger.error("Error during Adaptive RAG workflow execution: %s", str(e), exc_info=True)
-            # Create a fallback dictionary matching AdaptiveRAGState schema keys
+            total_elapsed = round(time.perf_counter() - start_time, 4)
             return {
                 "question": question,
                 "answer": f"⚠️ An error occurred during request processing: {str(e)}",
                 "retrieved_docs": [],
                 "external_citations": [],
-                "total_cost": cost_callback.total_cost
+                "total_cost": cost_callback.total_cost,
+                "total_latency": total_elapsed,
+                "latency_breakdown": {"total": total_elapsed}
             }

@@ -141,6 +141,11 @@ class Config:
     COHERE_RERANKER_TOP_N = 5
     MAX_REWRITES = 3
     MAX_GENERATIONS = 3
+
+    # Grader & Evaluator Thresholds
+    RETRIEVAL_GRADE_PASS_THRESHOLD = float(os.getenv("RETRIEVAL_GRADE_PASS_THRESHOLD", "0.7"))
+    HALLUCINATION_GRADE_PASS_THRESHOLD = float(os.getenv("HALLUCINATION_GRADE_PASS_THRESHOLD", "0.7"))
+    ANSWER_RELEVANCE_PASS_THRESHOLD = float(os.getenv("ANSWER_RELEVANCE_PASS_THRESHOLD", "0.7"))
     
     # Generation parameters
     LLM_TEMPERATURE = 0.2

@@ -1,7 +1,24 @@
 import shutil
 import logging
+from typing import List, Optional
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from config.llmgateway_config import Config
+
+# Optional native fallback imports at module level
+try:
+    from langchain_tavily import TavilySearch
+except ImportError:
+    try:
+        from langchain_community.tools.tavily_search import TavilySearchResults as TavilySearch
+    except ImportError:
+        TavilySearch = None
+
+try:
+    from langchain_community.utilities import WikipediaAPIWrapper
+    from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
+except ImportError:
+    WikipediaAPIWrapper = None
+    WikipediaQueryRun = None
 
 logger = logging.getLogger(__name__)
 
@@ -69,26 +86,19 @@ class MCPToolManager:
     def _get_native_fallback_tools(self) -> list:
         """Initialize native LangChain search tools as fallback."""
         fallback_tools = []
-        try:
-            try:
-                from langchain_tavily import TavilySearch
-                if Config.TAVILY_API_KEY:
-                    fallback_tools.append(TavilySearch(max_results=5, tavily_api_key=Config.TAVILY_API_KEY))
-                    logger.info("Initialized native TavilySearch fallback tool.")
-            except ImportError:
-                from langchain_community.tools.tavily_search import TavilySearchResults
-                if Config.TAVILY_API_KEY:
-                    fallback_tools.append(TavilySearchResults(max_results=5, tavily_api_key=Config.TAVILY_API_KEY))
-                    logger.info("Initialized native TavilySearchResults fallback tool.")
-        except Exception as e:
-            logger.debug("Native Tavily fallback tool unavailable: %s", e)
 
-        try:
-            from langchain_community.utilities import WikipediaAPIWrapper
-            from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
-            fallback_tools.append(WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper()))
-            logger.info("Initialized native WikipediaQueryRun fallback tool.")
-        except Exception as e:
-            logger.debug("Native Wikipedia fallback tool unavailable: %s", e)
+        if TavilySearch and Config.TAVILY_API_KEY:
+            try:
+                fallback_tools.append(TavilySearch(max_results=5, tavily_api_key=Config.TAVILY_API_KEY))
+                logger.info("Initialized native Tavily fallback tool.")
+            except Exception as e:
+                logger.debug("Could not instantiate native Tavily tool: %s", e)
+
+        if WikipediaQueryRun and WikipediaAPIWrapper:
+            try:
+                fallback_tools.append(WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper()))
+                logger.info("Initialized native WikipediaQueryRun fallback tool.")
+            except Exception as e:
+                logger.debug("Could not instantiate native Wikipedia tool: %s", e)
 
         return fallback_tools

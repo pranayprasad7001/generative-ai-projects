@@ -1,4 +1,5 @@
 import logging
+from contextvars import ContextVar
 from typing import Any, Callable, Awaitable
 from config.mcp_config import MCPToolManager
 from langchain_core.messages import AIMessage, ToolMessage
@@ -22,6 +23,9 @@ from langchain.agents.middleware import (
 
 logger = logging.getLogger(__name__)
 
+# Request-scoped tool calls counter context variable
+_tool_calls_counter_ctx: ContextVar[int] = ContextVar("tool_calls_counter_ctx", default=0)
+
 class ContentFilterMiddleware(AgentMiddleware):
     """
     Deterministic guardrail that blocks requests containing banned keywords.
@@ -37,7 +41,6 @@ class ContentFilterMiddleware(AgentMiddleware):
             for keyword in banned_keywords
         ]
         self.max_tool_calls = max_tool_calls
-        self.tool_calls_count = 0
 
     @hook_config(can_jump_to=["end"])
     def before_agent(
@@ -45,8 +48,8 @@ class ContentFilterMiddleware(AgentMiddleware):
         state: AgentState,
         runtime: Any,
     ) -> dict[str, Any] | None:
-        # Reset tool calls counter for each agent run
-        self.tool_calls_count = 0
+        # Reset request-scoped tool calls counter for this agent execution
+        _tool_calls_counter_ctx.set(0)
 
         if not state["messages"]:
             return None
@@ -89,8 +92,9 @@ class ContentFilterMiddleware(AgentMiddleware):
         tool_name = request.tool_call.get("name")
         args = request.tool_call.get("args", {})
         
-        self.tool_calls_count += 1
-        if self.tool_calls_count > self.max_tool_calls:
+        current_calls = _tool_calls_counter_ctx.get() + 1
+        _tool_calls_counter_ctx.set(current_calls)
+        if current_calls > self.max_tool_calls:
             logger.warning(
                 f"Maximum tool limit ({self.max_tool_calls}) reached. Forcing external search agent to finalize answer."
             )
@@ -146,8 +150,9 @@ class ContentFilterMiddleware(AgentMiddleware):
         tool_name = request.tool_call.get("name")
         args = request.tool_call.get("args", {})
         
-        self.tool_calls_count += 1
-        if self.tool_calls_count > self.max_tool_calls:
+        current_calls = _tool_calls_counter_ctx.get() + 1
+        _tool_calls_counter_ctx.set(current_calls)
+        if current_calls > self.max_tool_calls:
             logger.warning(
                 f"Maximum tool limit ({self.max_tool_calls}) reached. Forcing external search agent to finalize answer."
             )

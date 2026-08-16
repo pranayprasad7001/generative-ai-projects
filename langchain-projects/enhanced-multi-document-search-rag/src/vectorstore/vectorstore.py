@@ -1,20 +1,57 @@
+"""Vector Store and Hybrid Retrieval Management Module.
+
+This module coordinates:
+- AstraDB vector embeddings via LiteLLM Gateway
+- BM25 lexical retriever hydration and disk caching
+- Reciprocal Rank Fusion via LangChain EnsembleRetriever
+- Semantic document compression and reranking via Cohere Rerank
+- 5-dimension deterministic chunk hashing for zero-duplicate ingestion
+"""
+
 import os
 import pickle
 import logging
 import hashlib
 from pathlib import Path
-from config.llmgateway_config import Config
 from typing import List, Optional
+
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
 from langchain_community.retrievers import BM25Retriever
 from langchain_classic.retrievers import EnsembleRetriever, ContextualCompressionRetriever
 from langchain_classic.schema import Document
+from config.llmgateway_config import Config
 
 logger = logging.getLogger(__name__)
 
 CACHE_DIR = Path("data")
 BM25_CACHE_PATH = CACHE_DIR / "bm25_corpus.pkl"
+
+
+def compute_chunk_identity(doc: Document, default_embedding_model: str = Config.EMBEDDING_MODEL) -> str:
+    """
+    Compute a strong, deterministic chunk identity hash based on:
+    1. Source document path or URL
+    2. Document version (default 'v1')
+    3. Exact chunk text content
+    4. Chunking configuration (strategy, size, overlap, chunk index)
+    5. Embedding model name
+    """
+    meta = getattr(doc, "metadata", {}) or {}
+    source = meta.get("source", "")
+    version = meta.get("doc_version") or meta.get("version", "v1")
+    chunk_strategy = meta.get("chunk_strategy", "default")
+    chunk_size = meta.get("chunk_size", "")
+    chunk_overlap = meta.get("chunk_overlap", "")
+    chunk_index = meta.get("chunk_index", meta.get("chunk", ""))
+    embedding_model = meta.get("embedding_model") or default_embedding_model
+    content = doc.page_content or ""
+
+    identity_string = (
+        f"src:{source}|ver:{version}|strat:{chunk_strategy}|sz:{chunk_size}|"
+        f"ov:{chunk_overlap}|emb:{embedding_model}|chk:{chunk_index}|content:{content}"
+    )
+    return hashlib.sha256(identity_string.encode("utf-8")).hexdigest()
 
 
 class VectorStoreManager:
@@ -115,14 +152,8 @@ class VectorStoreManager:
 
         vector_store_collection = vector_store.astra_env.collection
 
-        # Generate unique deterministic IDs based on content and source
-        doc_id_map = {}
-        for doc in split_docs:
-            source = doc.metadata.get("source", "")
-            content = doc.page_content
-            unique_string = f"{source}_{content}"
-            doc_id = hashlib.sha256(unique_string.encode("utf-8")).hexdigest()
-            doc_id_map[doc_id] = doc
+        # Generate unique deterministic IDs based on composite identity (source, version, content, chunking, model)
+        doc_id_map = {compute_chunk_identity(doc): doc for doc in split_docs}
 
         all_ids = list(doc_id_map.keys())
         existing_ids = set()

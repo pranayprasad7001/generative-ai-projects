@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../s
 
 from state.adaptive_state import AdaptiveRAGState
 from langchain_core.messages import HumanMessage
+from graph_builder.adaptive_graph_builder import GraphBuilder
 
 class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
 
@@ -20,7 +21,6 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         self.mock_retriever = MagicMock()
         self.mock_llm = MagicMock()
         
-        from graph_builder.adaptive_graph_builder import GraphBuilder
         self.builder = GraphBuilder(self.mock_retriever, self.mock_llm)
 
     def test_build_graph(self):
@@ -32,7 +32,7 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
         expected_nodes = [
             "input_query_security_check",
             "query_analyzer",
-            "vector_search",
+            "hybrid_retrieval",
             "documents_grader",
             "query_rewriter",
             "answer_generator",
@@ -46,7 +46,6 @@ class TestGraphBuilder(unittest.IsolatedAsyncioTestCase):
 
     def test_build_graph_with_dual_models(self):
         """Test building graph when distinct generator and checker LLMs are provided."""
-        from graph_builder.adaptive_graph_builder import GraphBuilder
         mock_gen = MagicMock()
         mock_chk = MagicMock()
         builder = GraphBuilder(self.mock_retriever, llm_generator=mock_gen, llm_checker=mock_chk)

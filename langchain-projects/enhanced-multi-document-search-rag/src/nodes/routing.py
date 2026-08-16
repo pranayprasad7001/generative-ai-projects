@@ -1,0 +1,87 @@
+"""Routing logic and conditional edge functions for Adaptive RAG."""
+
+import logging
+from state.adaptive_state import AdaptiveRAGState
+from config.llmgateway_config import Config
+
+logger = logging.getLogger(__name__)
+
+
+def input_query_security_router(state: AdaptiveRAGState) -> str:
+    """Route based on input security check result."""
+    if state.query_blocked:
+        logger.warning("Routing to END due to security violation.")
+        return "end"
+    logger.info("Routing to query_analyzer after successful security check.")
+    return "query_analyzer"
+
+
+def query_router(state: AdaptiveRAGState) -> str:
+    """
+    Routes the query to the appropriate retrieval node based on query analysis.
+    """
+    logger.info("Routing query to: %s", state.tool_type)
+    if state.tool_type in ("hybrid_retrieval", "vector_search"):
+        return "hybrid_retrieval"
+
+    if state.tool_type == "external_search":
+        return "external_search"
+
+    raise ValueError(
+        f"Invalid tool_type: {state.tool_type}"
+    )
+
+
+def grader_router(state: AdaptiveRAGState) -> str:
+    """Route to the next node based on retrieval grading."""
+    is_passed = (
+        state.retrieval_grade in ("yes", "pass") or
+        (state.retrieval_score is not None and state.retrieval_score >= Config.RETRIEVAL_GRADE_PASS_THRESHOLD)
+    )
+    logger.info(
+        "Routing from retrieval grader. Passed: %s, Grade: %s, Score: %s, Rewrite count: %d",
+        is_passed, state.retrieval_grade, state.retrieval_score, state.rewrite_count
+    )
+    if is_passed:
+        return "answer_generator"
+    if state.rewrite_count >= Config.MAX_REWRITES:
+        return "external_search"
+    return "query_rewriter"
+
+
+def hallucination_router(state: AdaptiveRAGState) -> str:
+    """Route based on hallucination detection, score threshold, and retry count."""
+    is_grounded = (
+        state.hallucination_grade in ("yes", "pass") or
+        (state.hallucination_score is not None and state.hallucination_score >= Config.HALLUCINATION_GRADE_PASS_THRESHOLD)
+    )
+    logger.info(
+        "Routing from hallucination detector. Grounded: %s, Grade: %s, Score: %s, Generate count: %d",
+        is_grounded, state.hallucination_grade, state.hallucination_score, state.generate_count
+    )
+    if is_grounded:
+        return "answer_relevance_grader"
+    if state.generate_count >= Config.MAX_GENERATIONS:
+        if state.tool_type == "external_search" or state.external_results:
+            return "output_answer_security_check"
+        return "external_search"
+    return "answer_generator"
+
+
+def answer_relevance_router(state: AdaptiveRAGState) -> str:
+    """Route to next node based on answer relevance grader output and score threshold."""
+    is_relevant = (
+        state.answer_relevance_grade in ("yes", "pass") or
+        (state.answer_relevance_score is not None and state.answer_relevance_score >= Config.ANSWER_RELEVANCE_PASS_THRESHOLD)
+    )
+    logger.info(
+        "Routing from relevance grader. Relevant: %s, Grade: %s, Score: %s, Rewrite count: %d",
+        is_relevant, state.answer_relevance_grade, state.answer_relevance_score, state.rewrite_count
+    )
+    if is_relevant:
+        return "output_answer_security_check"
+    if state.rewrite_count >= Config.MAX_REWRITES or state.tool_type == "external_search" or state.external_results:
+        if state.tool_type == "external_search" or state.external_results:
+            return "output_answer_security_check"
+        return "external_search"
+    return "query_rewriter"

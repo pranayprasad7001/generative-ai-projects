@@ -48,7 +48,7 @@ class CostTrackingCallbackHandler(BaseCallbackHandler):
             # Check llm_output for token usage if not found in generations
             llm_output = response.llm_output or {}
             token_usage = llm_output.get("token_usage") or {}
-            default_model = getattr(Config, "LLM_MODEL_GENERATOR", getattr(Config, "LLM_MODEL", "nemotron-3-ultra-550b-a55b"))
+            default_model = getattr(Config, "LLM_MODEL_GENERATOR", "nemotron-3-ultra-550b-a55b")
             model_name = llm_output.get("model_name") or llm_output.get("model") or default_model
             
             # If we have token usage at the root LLMResult level, try to use it

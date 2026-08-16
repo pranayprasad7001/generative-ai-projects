@@ -35,9 +35,10 @@ QUERY_ANALYZER_SYSTEM_PROMPT = """
 
         You must choose exactly one tool type:
 
-        1. vector_search
+        1. hybrid_retrieval
            Choose this when the answer is expected to be found in the
-           application's indexed documents or knowledge base.
+           application's indexed documents or knowledge base. This performs
+           dense embeddings + BM25 keyword retrieval + ensemble + Cohere reranking.
 
         2. external_search
            Choose this when the question should be handled by the external
@@ -57,15 +58,15 @@ QUERY_ANALYZER_SYSTEM_PROMPT = """
 
         Decision rules:
 
-        - Prefer vector_search when the question clearly refers to the
+        - Prefer hybrid_retrieval when the question clearly refers to the
           application's documents or knowledge base.
         - Use external_search when the answer requires information outside
           those documents or when the question is conversational.
-        - Do not choose vector_search unless the application's knowledge base
+        - Do not choose hybrid_retrieval unless the application's knowledge base
           is likely to contain the required information.
 
         Return:
-          tool_type: "vector_search" | "external_search"
+          tool_type: "hybrid_retrieval" | "external_search"
           analysis: "Concise explanation supporting the decision."
         """
 
@@ -108,7 +109,8 @@ RETRIEVAL_GRADER_SYSTEM_PROMPT = """
 
             Return your evaluation in the following structured format:
 
-            grade: "yes" | "no"
+            score: float (0.0 to 1.0 confidence score representing document relevance)
+            decision: "pass" (score >= 0.7) | "rewrite" (score < 0.7)
             reasoning: "Concise explanation of why the retrieved documents are or are not useful."
         """
 
@@ -304,7 +306,8 @@ HALLUCINATION_DETECTOR_SYSTEM_PROMPT = """
 
         Respond in valid JSON format with the following schema:
         {{
-            "grade": "yes" | "no",
+            "score": float (0.0 to 1.0 groundedness confidence score),
+            "decision": "pass" (score >= 0.7) | "retry" (score < 0.7),
             "reasoning": "Concise explanation of the hallucination check."
         }}
         """
@@ -346,12 +349,13 @@ ANSWER_RELEVANCE_GRADER_SYSTEM_PROMPT = """
         - Do not use external knowledge to evaluate factual correctness.
         - Do not rewrite the answer.
 
-        A short answer can still receive "yes" if it adequately answers a simple
+        A short answer can still receive "pass" if it adequately answers a simple
         question.
 
         Respond in valid JSON format with the following schema:
         {{
-            "grade": "yes" | "no",
+            "score": float (0.0 to 1.0 answer relevance score),
+            "decision": "pass" (score >= 0.7) | "rewrite" (score < 0.7),
             "reasoning": "Concise explanation of the answer relevance check."
         }}
         """

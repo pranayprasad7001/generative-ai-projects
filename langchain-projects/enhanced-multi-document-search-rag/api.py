@@ -2,8 +2,9 @@
 
 This module provides production REST endpoints for:
 - Query execution via the Adaptive LangGraph RAG workflow
-- Document & URL ingestion into AstraDB vector store
-- System health checks and stats
+- Multi-turn conversational context & coreference resolution
+- Document & URL ingestion into AstraDB vector store with session isolation
+- System health checks and observability stats
 """
 
 import os
@@ -12,12 +13,14 @@ import time
 import logging
 import tempfile
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from contextlib import asynccontextmanager
 
+import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Ensure src directory is available on path
 sys.path.append(str(Path(__file__).parent / "src"))
@@ -51,7 +54,7 @@ async def lifespan(app: FastAPI):
         vector_store_manager = VectorStoreManager()
         doc_processor = DocumentProcessor(embeddings=vector_store_manager.embeddings)
         
-        # Initialize LLM and GraphBuilder
+        # Initialize LLMs and GraphBuilder
         llm_generator = Config.get_llm_generator()
         llm_checker = Config.get_llm_checker()
         retriever = vector_store_manager.get_retriever()
@@ -76,10 +79,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS Configuration
+# Configurable CORS
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for specific production frontend domains if needed
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -90,11 +96,18 @@ app.add_middleware(
 # Pydantic Schemas
 # ============================================================================
 
+class ChatMessage(BaseModel):
+    role: str = Field(..., description="'user' or 'assistant'")
+    content: str = Field(..., description="Message text content")
+
+
 class QueryRequest(BaseModel):
     question: str = Field(..., description="The query/question to answer")
     search_type: Optional[str] = Field("similarity", description="'similarity' or 'mmr'")
     k: Optional[int] = Field(5, description="Number of documents to retrieve")
     thread_id: Optional[str] = Field("default_thread", description="Thread identifier for session tracking")
+    session_id: Optional[str] = Field(None, description="Optional tenant or session identifier for corpus isolation")
+    messages: Optional[List[ChatMessage]] = Field(default_factory=list, description="Prior conversation history")
 
 
 class QueryResponse(BaseModel):
@@ -103,12 +116,14 @@ class QueryResponse(BaseModel):
     latency_seconds: float
     total_cost: float
     retrieved_docs: List[Dict[str, Any]] = []
-    external_citations: List[str] = []
+    external_citations: List[Union[Dict[str, Any], str]] = []
+    latency_breakdown: Dict[str, float] = {}
 
 
 class IngestUrlRequest(BaseModel):
     urls: List[str] = Field(..., description="List of URLs to ingest")
-    strategy: Optional[str] = Field("recursive", description="Chunk strategy: recursive, semantic, or character")
+    strategy: Optional[str] = Field("recursive", description="Chunk strategy: recursive, semantic, or hybrid")
+    session_id: Optional[str] = Field(None, description="Optional tenant/session ID to tag documents")
 
 
 class IngestResponse(BaseModel):
@@ -135,7 +150,7 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         astra_db_connected=vector_store_manager is not None,
-        model_configured=getattr(Config, "LLM_MODEL_GENERATOR", getattr(Config, "LLM_MODEL", "nemotron-3-ultra-550b-a55b")),
+        model_configured=Config.LLM_MODEL_GENERATOR,
         timestamp=time.time()
     )
 
@@ -151,15 +166,29 @@ async def query_rag(request: QueryRequest):
 
     start_time = time.time()
     try:
-        # Dynamically set retriever search type (similarity vs mmr) and k
-        search_type = "mmr" if request.search_type.lower() == "mmr" else "similarity"
-        rag_system.nodes.retriever = vector_store_manager.get_retriever(
+        # Dynamically create per-query retriever without mutating shared graph state
+        search_type = "mmr" if request.search_type and request.search_type.lower() == "mmr" else "similarity"
+        query_retriever = vector_store_manager.get_retriever(
             search_type=search_type,
-            k=request.k
+            k=request.k or 5,
+            session_id=request.session_id
         )
 
+        # Convert chat history to LangChain message instances
+        history_messages = []
+        for msg in request.messages or []:
+            if msg.role.lower() == "assistant":
+                history_messages.append(AIMessage(content=msg.content))
+            else:
+                history_messages.append(HumanMessage(content=msg.content))
+
         # Run query through compiled graph
-        result = await rag_system.run(request.question, thread_id=request.thread_id)
+        result = await rag_system.run(
+            question=request.question,
+            thread_id=request.thread_id,
+            messages=history_messages,
+            retriever=query_retriever
+        )
         latency = time.time() - start_time
 
         # Format retrieved docs
@@ -180,7 +209,8 @@ async def query_rag(request: QueryRequest):
             latency_seconds=round(latency, 3),
             total_cost=result.get("total_cost", 0.0),
             retrieved_docs=formatted_docs,
-            external_citations=result.get("external_citations", [])
+            external_citations=result.get("external_citations", []),
+            latency_breakdown=result.get("latency_breakdown", {})
         )
 
     except Exception as e:
@@ -204,9 +234,9 @@ async def ingest_urls(request: IngestUrlRequest):
         strategy_map = {
             "recursive": ChunkStrategy.RECURSIVE,
             "semantic": ChunkStrategy.SEMANTIC,
-            "character": ChunkStrategy.CHARACTER
+            "hybrid": ChunkStrategy.HYBRID,
         }
-        chunk_strategy = strategy_map.get(request.strategy.lower(), ChunkStrategy.RECURSIVE)
+        chunk_strategy = strategy_map.get((request.strategy or "recursive").lower(), ChunkStrategy.RECURSIVE)
         
         # Load & chunk
         docs = doc_processor.process_urls(request.urls, strategy=chunk_strategy)
@@ -216,17 +246,20 @@ async def ingest_urls(request: IngestUrlRequest):
                 detail="No content could be extracted from the provided URLs."
             )
 
+        if request.session_id:
+            for doc in docs:
+                doc.metadata["session_id"] = request.session_id
+
         # Ingest into vector store
         chunks_count = vector_store_manager.add_documents(docs)
-
-        # Update retriever in graph nodes
-        rag_system.nodes.retriever = vector_store_manager.get_retriever()
 
         return IngestResponse(
             message="URLs ingested successfully.",
             chunks_indexed=chunks_count,
             sources=request.urls
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error ingesting URLs: {e}", exc_info=True)
         raise HTTPException(
@@ -238,7 +271,8 @@ async def ingest_urls(request: IngestUrlRequest):
 @app.post("/api/v1/ingest/file", response_model=IngestResponse, tags=["Ingestion"])
 async def ingest_file(
     file: UploadFile = File(...),
-    strategy: str = Form("recursive")
+    strategy: str = Form("recursive"),
+    session_id: Optional[str] = Form(None)
 ):
     """Upload a file (PDF, TXT, DOCX, MD, CSV, XLSX) and ingest it into AstraDB."""
     if not vector_store_manager or not doc_processor:
@@ -264,7 +298,7 @@ async def ingest_file(
         strategy_map = {
             "recursive": ChunkStrategy.RECURSIVE,
             "semantic": ChunkStrategy.SEMANTIC,
-            "character": ChunkStrategy.CHARACTER
+            "hybrid": ChunkStrategy.HYBRID,
         }
         chunk_strategy = strategy_map.get(strategy.lower(), ChunkStrategy.RECURSIVE)
 
@@ -272,12 +306,11 @@ async def ingest_file(
         docs = doc_processor.load_documents([temp_path], strategy=chunk_strategy)
         for doc in docs:
             doc.metadata["source"] = file.filename
+            if session_id:
+                doc.metadata["session_id"] = session_id
 
         # Ingest into vector store
         chunks_count = vector_store_manager.add_documents(docs)
-
-        # Update retriever in graph nodes
-        rag_system.nodes.retriever = vector_store_manager.get_retriever()
 
         return IngestResponse(
             message=f"File '{file.filename}' ingested successfully.",
@@ -301,6 +334,6 @@ async def ingest_file(
 
 
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("api:app", host="0.0.0.0", port=port, reload=True)
+

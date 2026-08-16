@@ -35,4 +35,5 @@ dependencies = [
     "redisvl>=0.25.1",
     "redis>=7.4.1",
     "langchain-google-genai>=4.3.3",
+    "langchain-tavily>=0.2.18",
 ]

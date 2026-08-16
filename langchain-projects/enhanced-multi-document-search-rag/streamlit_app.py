@@ -5,8 +5,8 @@ import streamlit as st
 from pathlib import Path
 import sys
 import time
-import logging
 import asyncio
+import concurrent.futures
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +38,6 @@ def run_async(coro):
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            import concurrent.futures
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 return pool.submit(asyncio.run, coro).result()
         return loop.run_until_complete(coro)
@@ -456,7 +455,7 @@ def main():
                     start_time = time.time()
                     try:
                         search_type = "mmr" if search_type_choice == "Maximal Marginal Relevance (MMR)" else "similarity"
-                        st.session_state.rag_system.nodes.retriever = st.session_state.vector_store.get_retriever(
+                        query_retriever = st.session_state.vector_store.get_retriever(
                             k=top_k,
                             search_type=search_type
                         )
@@ -471,7 +470,8 @@ def main():
                             st.session_state.rag_system.run(
                                 question,
                                 thread_id="streamlit_session",
-                                messages=history_messages
+                                messages=history_messages,
+                                retriever=query_retriever
                             )
                         )
                         elapsed_time = time.time() - start_time
