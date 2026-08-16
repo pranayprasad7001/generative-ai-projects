@@ -90,7 +90,9 @@ class TestVectorStoreManager(unittest.TestCase):
 
         # Verify search arguments passed to vectorstore's retriever (candidate_k=10)
         self.manager.vectorstore.as_retriever.assert_called_once_with(search_type="mmr", search_kwargs={"k": 10})
-        self.assertEqual(self.manager.cohere_reranker.top_n, 5)
+        # Verify dedicated compressor was constructed with top_n=5
+        comp_kwargs = mock_compression_retriever.call_args.kwargs
+        self.assertEqual(comp_kwargs["base_compressor"].top_n, 5)
         self.assertEqual(self.manager._current_k, 5)
         self.assertEqual(self.manager._current_search_type, "mmr")
 

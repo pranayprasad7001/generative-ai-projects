@@ -56,6 +56,19 @@ class TestAPIEndpoints(unittest.TestCase):
         self.assertEqual(data["answer"], "AI is Artificial Intelligence.")
         self.assertEqual(data["total_cost"], 0.0005)
 
+    @patch("api.rag_system")
+    @patch("api.vector_store_manager")
+    def test_query_rag_error_sanitized(self, mock_vsm, mock_rag):
+        mock_vsm.get_retriever.return_value = MagicMock()
+        mock_rag.run = AsyncMock(side_effect=Exception("Internal database password secret leaked!"))
+
+        payload = {"question": "What is AI?"}
+        response = self.client.post("/api/v1/query", json=payload)
+        self.assertEqual(response.status_code, 500)
+        data = response.json()
+        self.assertNotIn("database password secret", data["detail"])
+        self.assertIn("An error occurred while processing the query", data["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

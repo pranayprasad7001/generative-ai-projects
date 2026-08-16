@@ -47,23 +47,25 @@ class RetrievalGrade(BaseModel):
 
     @model_validator(mode="after")
     def sync_grade_and_decision(self):
-        # If legacy grade was provided
-        if self.grade is not None:
+        # If score was NOT explicitly provided, but grade was provided
+        if "score" not in self.model_fields_set and self.grade is not None:
             if self.grade.lower() in ("yes", "pass"):
+                self.score = 1.0
+                self.decision = "pass"
+            else:
+                self.score = 0.3
+                self.decision = "rewrite"
+
+        # Score is strictly authoritative
+        if self.score is not None:
+            if self.score >= 0.7:
+                self.grade = "yes"
                 if self.decision not in ("pass", "yes"):
                     self.decision = "pass"
-                if self.score is None:
-                    self.score = 1.0
             else:
-                if self.decision not in ("rewrite", "retry", "fail", "no"):
+                self.grade = "no"
+                if self.decision in ("pass", "yes"):
                     self.decision = "rewrite"
-                if self.score is None or self.score == 1.0:
-                    self.score = 0.3
-        # Sync grade from decision/score
-        if self.decision in ("pass", "yes") or self.score >= 0.7:
-            self.grade = "yes"
-        else:
-            self.grade = "no"
         return self
 
 
@@ -105,21 +107,24 @@ class HallucinationGrade(BaseModel):
 
     @model_validator(mode="after")
     def sync_grade_and_decision(self):
-        if self.grade is not None:
+        if "score" not in self.model_fields_set and self.grade is not None:
             if self.grade.lower() in ("yes", "pass"):
+                self.score = 1.0
+                self.decision = "pass"
+            else:
+                self.score = 0.2
+                self.decision = "retry"
+
+        # Score is strictly authoritative
+        if self.score is not None:
+            if self.score >= 0.7:
+                self.grade = "yes"
                 if self.decision not in ("pass", "yes"):
                     self.decision = "pass"
-                if self.score is None:
-                    self.score = 1.0
             else:
-                if self.decision not in ("retry", "fail", "no"):
+                self.grade = "no"
+                if self.decision in ("pass", "yes"):
                     self.decision = "retry"
-                if self.score is None or self.score == 1.0:
-                    self.score = 0.2
-        if self.decision in ("pass", "yes") or self.score >= 0.7:
-            self.grade = "yes"
-        else:
-            self.grade = "no"
         return self
 
 
@@ -148,21 +153,24 @@ class AnswerRelevanceGrade(BaseModel):
 
     @model_validator(mode="after")
     def sync_grade_and_decision(self):
-        if self.grade is not None:
+        if "score" not in self.model_fields_set and self.grade is not None:
             if self.grade.lower() in ("yes", "pass"):
+                self.score = 1.0
+                self.decision = "pass"
+            else:
+                self.score = 0.3
+                self.decision = "rewrite"
+
+        # Score is strictly authoritative
+        if self.score is not None:
+            if self.score >= 0.7:
+                self.grade = "yes"
                 if self.decision not in ("pass", "yes"):
                     self.decision = "pass"
-                if self.score is None:
-                    self.score = 1.0
             else:
-                if self.decision not in ("rewrite", "retry", "fail", "no"):
+                self.grade = "no"
+                if self.decision in ("pass", "yes"):
                     self.decision = "rewrite"
-                if self.score is None or self.score == 1.0:
-                    self.score = 0.3
-        if self.decision in ("pass", "yes") or self.score >= 0.7:
-            self.grade = "yes"
-        else:
-            self.grade = "no"
         return self
 
 

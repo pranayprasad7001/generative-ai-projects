@@ -48,12 +48,14 @@ class TestSecurityNodes(unittest.IsolatedAsyncioTestCase):
         updated_state = await self.nodes.output_answer_security_check(state)
         self.assertEqual(updated_state.answer, "Sanitized Safe Answer")
 
-    async def test_output_answer_security_check_fail_closed(self):
-        self.mock_output_agent.ainvoke = AsyncMock(side_effect=Exception("Security timeout"))
+    async def test_input_query_security_check_unknown_fails_closed(self):
+        mock_msg = AIMessage(content="MAYBE_SAFE_MAYBE_NOT_UNRECOGNIZED")
+        self.mock_input_agent.ainvoke = AsyncMock(return_value={"messages": [mock_msg]})
 
-        state = AdaptiveRAGState(question="q", answer="raw answer")
-        updated_state = await self.nodes.output_answer_security_check(state)
-        self.assertIn("could not be verified", updated_state.answer)
+        state = AdaptiveRAGState(question="Ambiguous query")
+        updated_state = await self.nodes.input_query_security_check(state)
+        self.assertTrue(updated_state.query_blocked)
+        self.assertIn("could not be processed", updated_state.answer)
 
 
 if __name__ == "__main__":

@@ -113,7 +113,7 @@ class GraphBuilder:
             },
         )
 
-        builder.add_edge("external_search", "hallucination_detector")
+        builder.add_edge("external_search", "answer_generator")
         builder.add_edge("output_answer_security_check", END)
 
         # Compile the graph

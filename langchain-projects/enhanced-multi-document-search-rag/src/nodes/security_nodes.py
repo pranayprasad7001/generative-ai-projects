@@ -1,5 +1,4 @@
-"""Security guardrail nodes for Adaptive RAG."""
-
+import re
 import logging
 import time
 from state.adaptive_state import AdaptiveRAGState
@@ -47,23 +46,24 @@ class SecurityNodes:
             last_message = messages[-1]
             content = last_message.content if hasattr(last_message, "content") else str(last_message)
             content_clean = content.strip().upper()
+            denial_patterns = ["BLOCKED", "UNSAFE", "REQUEST IS UNSAFE", "DENIED", "ACCESS DENIED", "POLICY VIOLATION DETECTED"]
+            has_denial = any(pattern in content_clean for pattern in denial_patterns)
 
-            if "BLOCKED" in content_clean or content_clean.startswith("UNSAFE"):
-                logger.warning("Input query blocked by security guardrail.")
-                state.query_blocked = True
-                state.answer = "I cannot process this request. Please rephrase your question."
-            elif "SAFE" in content_clean or "PASSED" in content_clean:
+            # Match exact word tokens for SAFE or PASSED
+            tokens = set(re.findall(r"\b[A-Z0-9_]+\b", content_clean))
+            is_explicitly_safe = ("SAFE" in tokens or "PASSED" in tokens) and not has_denial
+
+            if is_explicitly_safe:
                 logger.info("Input query passed security check.")
                 state.query_blocked = False
+            elif has_denial:
+                logger.warning("Input query denied by safety guardrail agent: %s", content_clean)
+                state.query_blocked = True
+                state.answer = "I cannot process this request. Please rephrase your question."
             else:
-                denial_patterns = ["REQUEST IS UNSAFE", "DENIED", "ACCESS DENIED", "POLICY VIOLATION DETECTED"]
-                if any(pattern in content_clean for pattern in denial_patterns):
-                    logger.warning("Input query denied by safety guardrail agent.")
-                    state.query_blocked = True
-                    state.answer = "I cannot process this request. Please rephrase your question."
-                else:
-                    logger.info("Input query treated as SAFE by guardrail agent.")
-                    state.query_blocked = False
+                logger.warning("Unknown input guardrail classification '%s'. Failing closed for safety.", content_clean)
+                state.query_blocked = True
+                state.answer = "⚠️ This request could not be processed due to security filtering."
 
         except Exception as e:
             logger.error("Exception during input security guardrail check: %s. Failing closed.", e, exc_info=True)

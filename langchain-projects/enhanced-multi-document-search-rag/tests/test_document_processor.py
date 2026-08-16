@@ -108,6 +108,11 @@ class TestDocumentProcessor(unittest.TestCase):
         self.assertEqual(docs[0].metadata["source"], csv_path)
         self.assertEqual(docs[0].metadata["loader"], "CSVLoader")
         self.assertEqual(docs[0].metadata["row"], 0)
+        self.assertEqual(docs[0].metadata["chunk_strategy"], "recursive")
+        self.assertEqual(docs[0].metadata["chunk_index"], 0)
+        self.assertEqual(docs[0].metadata["doc_version"], "v1")
+        self.assertIn("chunk_size", docs[0].metadata)
+        self.assertIn("chunk_overlap", docs[0].metadata)
 
     def test_load_from_directory(self):
         with tempfile.TemporaryDirectory() as tmpdir:

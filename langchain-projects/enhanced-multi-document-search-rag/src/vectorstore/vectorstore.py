@@ -238,6 +238,8 @@ class VectorStoreManager:
     ) -> ContextualCompressionRetriever:
         """
         Create a hybrid retriever from vector store with dynamic Cohere reranking and optional session filtering.
+        Thread-safe: constructs dedicated retriever and reranker instances without mutating shared global state.
+        
         Args:
             vectorstore: AstraDBVectorStore 
             k (int): Number of final documents to retrieve after reranking
@@ -263,44 +265,56 @@ class VectorStoreManager:
         if filter_dict:
             search_kwargs["filter"] = filter_dict
 
-        self.retriever = vectorstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
+        vec_retriever = vectorstore.as_retriever(search_type=search_type, search_kwargs=search_kwargs)
 
-        # Dynamically set Cohere reranker output to match requested k
-        self.cohere_reranker.top_n = k
+        # Create a dedicated Cohere reranker instance per retriever to prevent mutating shared state
+        cohere_reranker = CohereRerank(
+            model=Config.COHERE_RERANKER_MODEL,
+            top_n=k
+        )
 
         target_documents = self.documents
         if session_id and self.documents:
             target_documents = [d for d in self.documents if d.metadata.get("session_id") == session_id]
 
         if target_documents:
-            self.bm25_retriever = BM25Retriever.from_documents(target_documents)
-            self.bm25_retriever.k = candidate_k
-            self.ensemble_retriever = EnsembleRetriever(
-                retrievers=[self.retriever, self.bm25_retriever],
+            bm25_retriever = BM25Retriever.from_documents(target_documents)
+            bm25_retriever.k = candidate_k
+            ensemble_retriever = EnsembleRetriever(
+                retrievers=[vec_retriever, bm25_retriever],
                 weights=[0.7, 0.3]
             )
-            base_retriever = self.ensemble_retriever
+            base_retriever = ensemble_retriever
             logger.info("EnsembleRetriever initialized with AstraDB vector and BM25 lexical search.")
         else:
             logger.warning("No documents loaded in corpus yet; BM25 disabled. Using vector store retriever directly.")
-            self.ensemble_retriever = None
-            base_retriever = self.retriever
+            bm25_retriever = None
+            ensemble_retriever = None
+            base_retriever = vec_retriever
 
-        self.compression_retriever = ContextualCompressionRetriever(
-            base_compressor=self.cohere_reranker,
+        compression_retriever = ContextualCompressionRetriever(
+            base_compressor=cohere_reranker,
             base_retriever=base_retriever
         )
-        self._current_k = k
-        self._current_search_type = search_type
 
-        return self.compression_retriever
+        # For default zero-argument caching
+        if filter is None and session_id is None:
+            self.retriever = vec_retriever
+            self.bm25_retriever = bm25_retriever
+            self.ensemble_retriever = ensemble_retriever
+            self.compression_retriever = compression_retriever
+            self._current_k = k
+            self._current_search_type = search_type
 
-    def rerank_documents(self, query: str, documents: List[Document]) -> List[Document]:
+        return compression_retriever
+
+    def rerank_documents(self, query: str, documents: List[Document], top_n: Optional[int] = None) -> List[Document]:
         """
         Rerank documents based on query using Cohere Rerank.
         Args:
             query (str): Query to rerank documents for
             documents (List[Document]): List of documents to rerank
+            top_n (int, optional): Optional override for number of reranked docs
         Returns:
             List[Document]: Reranked list of documents
         """
@@ -314,7 +328,10 @@ class VectorStoreManager:
             return documents
 
         try:
-            reranked = self.cohere_reranker.compress_documents(documents=documents, query=query)
+            reranker = self.cohere_reranker
+            if top_n is not None and top_n != self.cohere_reranker.top_n:
+                reranker = CohereRerank(model=Config.COHERE_RERANKER_MODEL, top_n=top_n)
+            reranked = reranker.compress_documents(documents=documents, query=query)
             logger.info("Reranked %d candidate documents into %d documents.", len(documents), len(reranked))
             return reranked
         except Exception:
@@ -329,8 +346,12 @@ class VectorStoreManager:
         session_id: Optional[str] = None
     ) -> ContextualCompressionRetriever:
         """
-        Get the compression retriever, initializing or updating it if necessary.
+        Get the compression retriever, initializing or creating a dedicated per-query retriever.
         """
+        if self.vectorstore is None:
+            logger.error("Cannot get retriever; vectorstore is not initialized.")
+            raise ValueError("No vectorstore found, please create or load a vectorstore first.")
+
         if (
             self.compression_retriever is None
             or self._current_k != k
@@ -338,10 +359,7 @@ class VectorStoreManager:
             or filter is not None
             or session_id is not None
         ):
-            if self.vectorstore is None:
-                logger.error("Cannot get retriever; vectorstore is not initialized.")
-                raise ValueError("No vectorstore found, please create or load a vectorstore first.")
-            self.create_retriever(
+            return self.create_retriever(
                 self.vectorstore,
                 k=k,
                 search_type=search_type,

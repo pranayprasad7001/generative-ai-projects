@@ -221,11 +221,13 @@ async def query_rag(request: QueryRequest):
             latency_breakdown=result.get("latency_breakdown", {})
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error handling query: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Query execution failed: {str(e)}"
+            detail="An error occurred while processing the query. Please try again later."
         )
 
 
@@ -272,7 +274,7 @@ async def ingest_urls(request: IngestUrlRequest):
         logger.error(f"Error ingesting URLs: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"URL ingestion failed: {str(e)}"
+            detail="URL ingestion failed due to an internal server error."
         )
 
 
@@ -331,7 +333,7 @@ async def ingest_file(
         logger.error(f"Error ingesting file: {e}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"File ingestion failed: {str(e)}"
+            detail="File ingestion failed due to an internal server error."
         )
     finally:
         if temp_path and os.path.exists(temp_path):

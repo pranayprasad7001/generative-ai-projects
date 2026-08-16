@@ -165,10 +165,17 @@ class DocumentProcessor:
             List[Document]: List of documents
         """
         docs = CSVLoader(str(file_path)).load()
+        strat_val = strategy.value if hasattr(strategy, "value") else str(strategy)
         for row, doc in enumerate(docs):
             doc.metadata["row"] = row
 
-        docs_with_metadata = self.chunker.add_metadata(docs=docs, source=file_path, loader_name="CSVLoader")
+        docs_with_metadata = self.chunker.add_metadata(
+            docs=docs,
+            source=file_path,
+            loader_name="CSVLoader",
+            add_chunk=True,
+            chunk_strategy=strat_val
+        )
 
         logger.info("Loaded %d rows from %s", len(docs), file_path)
         return docs_with_metadata

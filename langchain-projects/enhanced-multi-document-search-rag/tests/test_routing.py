@@ -78,5 +78,34 @@ class TestRouting(unittest.TestCase):
         self.assertEqual(answer_relevance_router(state_irrel_max), "external_search")
 
 
+    def test_grader_router_score_authoritative(self):
+        # Even if grade is 'yes', a low score (< 0.7) must fail
+        state_failing_score = AdaptiveRAGState(question="q", retrieval_grade="yes", retrieval_score=0.3, rewrite_count=0)
+        self.assertEqual(grader_router(state_failing_score), "query_rewriter")
+
+    def test_hallucination_router_score_authoritative(self):
+        # Even if grade is 'yes', a low score (< 0.7) must trigger regeneration
+        state_failing_score = AdaptiveRAGState(question="q", hallucination_grade="yes", hallucination_score=0.2, generate_count=1)
+        self.assertEqual(hallucination_router(state_failing_score), "answer_generator")
+
+    def test_answer_relevance_router_score_authoritative(self):
+        # Even if grade is 'yes', a low score (< 0.7) must trigger rewrite
+        state_failing_score = AdaptiveRAGState(question="q", answer_relevance_grade="yes", answer_relevance_score=0.2, rewrite_count=0)
+        self.assertEqual(answer_relevance_router(state_failing_score), "query_rewriter")
+
+    def test_hallucination_router_max_generations_external_search_refusal(self):
+        state = AdaptiveRAGState(
+            question="q",
+            hallucination_grade="no",
+            hallucination_score=0.2,
+            generate_count=Config.MAX_GENERATIONS,
+            external_results="Extracted search snippet",
+            answer="Hallucinated claim"
+        )
+        route = hallucination_router(state)
+        self.assertEqual(route, "output_answer_security_check")
+        self.assertIn("unable to provide a verified answer", state.answer)
+
+
 if __name__ == "__main__":
     unittest.main()

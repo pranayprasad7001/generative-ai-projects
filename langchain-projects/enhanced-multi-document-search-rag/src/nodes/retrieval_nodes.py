@@ -128,7 +128,6 @@ class RetrievalNodes:
             answer = str(raw_answer) if raw_answer is not None else ""
         
         state.external_results = answer
-        state.answer = answer
 
         # Extract structured external citations from ToolMessages
         citations = []

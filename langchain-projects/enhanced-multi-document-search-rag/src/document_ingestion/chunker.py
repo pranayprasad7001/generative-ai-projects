@@ -105,6 +105,7 @@ class Chunker:
             meta = {
                 "chunk_size": self.chunk_size,
                 "chunk_overlap": self.chunk_overlap,
+                "chunk_strategy": "recursive",
                 "doc_version": "v1",
                 **base_metadata,
                 **existing_metadata,

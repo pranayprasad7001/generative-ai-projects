@@ -34,10 +34,11 @@ def query_router(state: AdaptiveRAGState) -> str:
 
 def grader_router(state: AdaptiveRAGState) -> str:
     """Route to the next node based on retrieval grading."""
-    is_passed = (
-        state.retrieval_grade in ("yes", "pass") or
-        (state.retrieval_score is not None and state.retrieval_score >= Config.RETRIEVAL_GRADE_PASS_THRESHOLD)
-    )
+    if state.retrieval_score is not None:
+        is_passed = state.retrieval_score >= Config.RETRIEVAL_GRADE_PASS_THRESHOLD
+    else:
+        is_passed = state.retrieval_grade in ("yes", "pass")
+
     logger.info(
         "Routing from retrieval grader. Passed: %s, Grade: %s, Score: %s, Rewrite count: %d",
         is_passed, state.retrieval_grade, state.retrieval_score, state.rewrite_count
@@ -51,10 +52,11 @@ def grader_router(state: AdaptiveRAGState) -> str:
 
 def hallucination_router(state: AdaptiveRAGState) -> str:
     """Route based on hallucination detection, score threshold, and retry count."""
-    is_grounded = (
-        state.hallucination_grade in ("yes", "pass") or
-        (state.hallucination_score is not None and state.hallucination_score >= Config.HALLUCINATION_GRADE_PASS_THRESHOLD)
-    )
+    if state.hallucination_score is not None:
+        is_grounded = state.hallucination_score >= Config.HALLUCINATION_GRADE_PASS_THRESHOLD
+    else:
+        is_grounded = state.hallucination_grade in ("yes", "pass")
+
     logger.info(
         "Routing from hallucination detector. Grounded: %s, Grade: %s, Score: %s, Generate count: %d",
         is_grounded, state.hallucination_grade, state.hallucination_score, state.generate_count
@@ -63,6 +65,8 @@ def hallucination_router(state: AdaptiveRAGState) -> str:
         return "answer_relevance_grader"
     if state.generate_count >= Config.MAX_GENERATIONS:
         if state.tool_type == "external_search" or state.external_results:
+            logger.warning("Answer remains ungrounded after MAX_GENERATIONS with external search. Refusing to return hallucinated answer.")
+            state.answer = "I am unable to provide a verified answer based on the available documents and external sources. Please refine or rephrase your question."
             return "output_answer_security_check"
         return "external_search"
     return "answer_generator"
@@ -70,10 +74,11 @@ def hallucination_router(state: AdaptiveRAGState) -> str:
 
 def answer_relevance_router(state: AdaptiveRAGState) -> str:
     """Route to next node based on answer relevance grader output and score threshold."""
-    is_relevant = (
-        state.answer_relevance_grade in ("yes", "pass") or
-        (state.answer_relevance_score is not None and state.answer_relevance_score >= Config.ANSWER_RELEVANCE_PASS_THRESHOLD)
-    )
+    if state.answer_relevance_score is not None:
+        is_relevant = state.answer_relevance_score >= Config.ANSWER_RELEVANCE_PASS_THRESHOLD
+    else:
+        is_relevant = state.answer_relevance_grade in ("yes", "pass")
+
     logger.info(
         "Routing from relevance grader. Relevant: %s, Grade: %s, Score: %s, Rewrite count: %d",
         is_relevant, state.answer_relevance_grade, state.answer_relevance_score, state.rewrite_count
