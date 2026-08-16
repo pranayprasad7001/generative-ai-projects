@@ -15,7 +15,7 @@ import logging
 import hashlib
 import threading
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from langchain_cohere import CohereRerank
 from langchain_astradb import AstraDBVectorStore
@@ -79,7 +79,6 @@ class VectorStoreManager:
             collection_name=Config.ASTRA_DB_COLLECTION_NAME,
             token=Config.ASTRA_DB_API_KEY,
             api_endpoint=Config.ASTRA_DB_API_ENDPOINT,
-            embedding_dimension=Config.OUTPUT_DIMENSION,
         )
         self.bm25_retriever: Optional[BM25Retriever] = None
         self.ensemble_retriever: Optional[EnsembleRetriever] = None
@@ -341,7 +340,7 @@ class VectorStoreManager:
             logger.error("Cannot create retriever; vectorstore is not initialized.")
             raise ValueError("No vectorstore found, please create or load a vectorstore first.")
 
-        search_kwargs = {"k": candidate_k}
+        search_kwargs: dict[str, Any] = {"k": candidate_k}
         if filter_dict:
             search_kwargs["filter"] = filter_dict
 
@@ -413,7 +412,7 @@ class VectorStoreManager:
                 reranker = CohereRerank(model=Config.COHERE_RERANKER_MODEL, top_n=top_n)
             reranked = reranker.compress_documents(documents=documents, query=query)
             logger.info("Reranked %d candidate documents into %d documents.", len(documents), len(reranked))
-            return reranked
+            return list(reranked)
         except Exception:
             logger.exception("Failed to rerank. Returning original documents.")
             return documents

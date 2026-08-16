@@ -30,10 +30,10 @@ class GraphBuilder:
             llm_checker=llm_checker,
             llm=llm
         )
-        self.graph = None
+        self.graph: Any = None
         self.checkpointer = InMemorySaver()
 
-    def build_graph(self, use_checkpointer: bool = True):
+    def build_graph(self, use_checkpointer: bool = True) -> Any:
         """
         Build the RAG workflow graph
 
@@ -158,11 +158,15 @@ class GraphBuilder:
         Returns:
             Dictionary with structured result containing success, answer, error, error_type, and other details
         """
-        if self.graph is None:
+        graph = self.graph
+        if graph is None:
             logger.info(
                 "Graph is not compiled yet. Compiling before run..."
             )
-            self.build_graph()
+            graph = self.build_graph()
+
+        if graph is None:
+            raise RuntimeError("Failed to build or compile StateGraph.")
 
         resolved_thread_id = thread_id or "default_session"
 
@@ -192,7 +196,7 @@ class GraphBuilder:
             configurable["retriever"] = retriever
 
         try:
-            result = await self.graph.ainvoke(
+            result = await graph.ainvoke(
                 initial_state,
                 config={
                     "configurable": configurable,

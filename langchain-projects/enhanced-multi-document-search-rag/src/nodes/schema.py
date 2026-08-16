@@ -32,7 +32,7 @@ class RetrievalGrade(BaseModel):
         le=1.0,
         description="Relevance confidence score between 0.0 (irrelevant) and 1.0 (highly relevant and sufficient)."
     )
-    decision: Literal["pass", "retry", "rewrite", "fail", "yes", "no"] = Field(
+    decision: Literal["pass", "retry", "rewrite", "fail", "yes", "no"] | str = Field(
         default="pass",
         description="Grading decision based on relevance score."
     )
@@ -40,7 +40,7 @@ class RetrievalGrade(BaseModel):
         default="Evaluated document relevance.",
         description="Concise explanation for the grading decision and score."
     )
-    grade: Optional[str] = Field(
+    grade: Literal["yes", "no", "pass", "fail", "rewrite"] | str | None = Field(
         default=None,
         description="Backward compatibility field for binary grade ('yes' or 'no')."
     )
@@ -92,7 +92,7 @@ class HallucinationGrade(BaseModel):
         le=1.0,
         description="Groundedness confidence score between 0.0 (hallucinated) and 1.0 (fully grounded in context)."
     )
-    decision: Literal["pass", "retry", "fail", "yes", "no"] = Field(
+    decision: Literal["pass", "retry", "rewrite", "fail", "yes", "no"] | str = Field(
         default="pass",
         description="Groundedness decision: 'pass' (grounded) or 'retry' (hallucinated)."
     )
@@ -100,7 +100,7 @@ class HallucinationGrade(BaseModel):
         default="Evaluated answer groundedness.",
         description="Concise explanation of the hallucination check."
     )
-    grade: Optional[str] = Field(
+    grade: Literal["yes", "no", "pass", "fail", "retry"] | str | None = Field(
         default=None,
         description="Backward compatibility field for binary grade ('yes' or 'no')."
     )
@@ -138,7 +138,7 @@ class AnswerRelevanceGrade(BaseModel):
         le=1.0,
         description="Answer relevance score between 0.0 (irrelevant) and 1.0 (directly and completely answers question)."
     )
-    decision: Literal["pass", "retry", "rewrite", "fail", "yes", "no"] = Field(
+    decision: Literal["pass", "retry", "rewrite", "fail", "yes", "no"] | str = Field(
         default="pass",
         description="Relevance decision: 'pass' (relevant) or 'rewrite' / 'retry' (irrelevant)."
     )
@@ -146,7 +146,7 @@ class AnswerRelevanceGrade(BaseModel):
         default="Evaluated answer relevance.",
         description="Concise explanation of the answer relevance check."
     )
-    grade: Optional[str] = Field(
+    grade: Literal["yes", "no", "pass", "fail", "rewrite"] | str | None = Field(
         default=None,
         description="Backward compatibility field for binary grade ('yes' or 'no')."
     )

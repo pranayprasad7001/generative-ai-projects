@@ -1,6 +1,7 @@
 import re
 import logging
 import time
+from typing import Any
 from state.adaptive_state import AdaptiveRAGState
 from langchain_core.messages import HumanMessage
 from nodes.guardrails import Guardrails, sanitize_pii
@@ -15,8 +16,8 @@ class SecurityNodes:
         self.llm_checker = llm_checker
         self.llm_generator = llm_generator if llm_generator is not None else llm_checker
         self.guardrails = guardrails or Guardrails(llm_checker=self.llm_checker, llm_generator=self.llm_generator)
-        self.input_guardrail_agent = self.guardrails.get_input_guardrail_agent()
-        self.output_guardrail_agent = self.guardrails.get_output_guardrail_agent()
+        self.input_guardrail_agent: Any = self.guardrails.get_input_guardrail_agent()
+        self.output_guardrail_agent: Any = self.guardrails.get_output_guardrail_agent()
 
     async def input_query_security_check(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """Validate the user's query before entering the RAG workflow and sanitize PII."""
@@ -34,7 +35,11 @@ class SecurityNodes:
         logger.debug("Input query content (PII-sanitized): %s", state.question)
 
         try:
-            response = await self.input_guardrail_agent.ainvoke(
+            agent = self.input_guardrail_agent or self.guardrails.get_input_guardrail_agent()
+            if agent is None:
+                raise RuntimeError("Failed to initialize input guardrail agent.")
+
+            response = await agent.ainvoke(
                 {
                     "messages": [
                         HumanMessage(content=state.question)
@@ -97,7 +102,11 @@ class SecurityNodes:
         original_answer = state.answer
 
         try:
-            response = await self.output_guardrail_agent.ainvoke(
+            agent = self.output_guardrail_agent or self.guardrails.get_output_guardrail_agent()
+            if agent is None:
+                raise RuntimeError("Failed to initialize output guardrail agent.")
+
+            response = await agent.ainvoke(
                 {
                     "messages": [
                         HumanMessage(content=f"Review the following answer for safety and policy compliance:\n\n{state.answer}")

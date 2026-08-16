@@ -156,7 +156,8 @@ class Chunker:
             raise ValueError(f"strategy must be a ChunkStrategy or a valid string. Got: {type(strategy).__name__}")
 
         # Validate embeddings requirement
-        if strategy in (ChunkStrategy.SEMANTIC, ChunkStrategy.HYBRID) and not self.semantic_text_splitter:
+        semantic_splitter = self.semantic_text_splitter
+        if strategy in (ChunkStrategy.SEMANTIC, ChunkStrategy.HYBRID) and semantic_splitter is None:
             raise ValueError(f"Embeddings must be provided to Chunker to use '{strategy.value}' chunking strategy.")
 
         if file_type == ".md":
@@ -172,9 +173,13 @@ class Chunker:
             logger.debug("Markdown splitting of %d header sections using strategy '%s' started...", len(header_splits), strategy)
             
             if strategy is ChunkStrategy.SEMANTIC:
-                split_docs = self.semantic_text_splitter.split_documents(header_splits)
+                if semantic_splitter is None:
+                    raise ValueError("Embeddings must be provided for semantic splitting.")
+                split_docs = semantic_splitter.split_documents(header_splits)
             elif strategy is ChunkStrategy.HYBRID:
-                split_docs = self.semantic_text_splitter.split_documents(header_splits)
+                if semantic_splitter is None:
+                    raise ValueError("Embeddings must be provided for hybrid splitting.")
+                split_docs = semantic_splitter.split_documents(header_splits)
                 split_docs = self.recursive_text_splitter.split_documents(split_docs)
             else: # recursive or fallback
                 split_docs = self.recursive_text_splitter.split_documents(header_splits)
@@ -183,11 +188,15 @@ class Chunker:
                 docs = [Document(page_content=docs)]
             
             if strategy is ChunkStrategy.SEMANTIC:
+                if semantic_splitter is None:
+                    raise ValueError("Embeddings must be provided for semantic splitting.")
                 logger.debug("Semantic splitting started...")
-                split_docs = self.semantic_text_splitter.split_documents(docs)
+                split_docs = semantic_splitter.split_documents(docs)
             elif strategy is ChunkStrategy.HYBRID:
+                if semantic_splitter is None:
+                    raise ValueError("Embeddings must be provided for hybrid splitting.")
                 logger.debug("Hybrid splitting started...")
-                split_docs = self.semantic_text_splitter.split_documents(docs)
+                split_docs = semantic_splitter.split_documents(docs)
                 split_docs = self.recursive_text_splitter.split_documents(split_docs)
             else: # recursive
                 logger.debug("Recursive splitting started...")

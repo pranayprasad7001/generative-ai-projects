@@ -3,6 +3,7 @@
 import os
 import litellm
 import logging
+from typing import Any
 from pydantic import ConfigDict
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -74,9 +75,9 @@ class RateLimitedOpenAIEmbeddings(OpenAIEmbeddings):
             embeddings.extend(r["embedding"] for r in response["data"])
         return embeddings
 
-    def embed_query(self, text: str) -> list[float]:
+    def embed_query(self, text: str, **kwargs: Any) -> list[float]:
         """Embed a single query with rate limiting (delegates to rate-limited embed_documents)."""
-        return self.embed_documents([text])[0]
+        return self.embed_documents([text], **kwargs)[0]
 
     async def aembed_documents(self, texts: list[str], chunk_size: int | None = None, **kwargs) -> list[list[float]]:
         """Asynchronously call OpenAI's embedding endpoint with rate-limited chunking."""
@@ -94,9 +95,9 @@ class RateLimitedOpenAIEmbeddings(OpenAIEmbeddings):
             embeddings.extend(r["embedding"] for r in response["data"])
         return embeddings
 
-    async def aembed_query(self, text: str) -> list[float]:
+    async def aembed_query(self, text: str, **kwargs: Any) -> list[float]:
         """Asynchronously embed a single query with rate limiting (delegates to aembed_documents)."""
-        embeddings = await self.aembed_documents([text])
+        embeddings = await self.aembed_documents([text], **kwargs)
         return embeddings[0]
 
 class Config:

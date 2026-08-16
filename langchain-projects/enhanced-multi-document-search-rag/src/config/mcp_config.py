@@ -14,9 +14,11 @@ except ImportError:
         TavilySearch = None
 
 try:
+    import wikipedia
     from langchain_community.utilities import WikipediaAPIWrapper
     from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
 except ImportError:
+    wikipedia = None
     WikipediaAPIWrapper = None
     WikipediaQueryRun = None
 
@@ -96,7 +98,8 @@ class MCPToolManager:
 
         if WikipediaQueryRun and WikipediaAPIWrapper:
             try:
-                fallback_tools.append(WikipediaQueryRun(api_wrapper=WikipediaAPIWrapper()))
+                wrapper = WikipediaAPIWrapper(wiki_client=wikipedia) if wikipedia is not None else WikipediaAPIWrapper(wiki_client=None)
+                fallback_tools.append(WikipediaQueryRun(api_wrapper=wrapper))
                 logger.info("Initialized native WikipediaQueryRun fallback tool.")
             except Exception as e:
                 logger.debug("Could not instantiate native Wikipedia tool: %s", e)

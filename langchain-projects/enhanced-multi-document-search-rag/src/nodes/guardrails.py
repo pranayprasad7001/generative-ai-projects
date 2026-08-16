@@ -54,6 +54,23 @@ def sanitize_pii(text: str) -> str:
     return sanitized
 
 
+def _extract_text_content(content: Any) -> str:
+    """Extract plain text string from str, list, dict or arbitrary message content."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            else:
+                parts.append(str(item))
+        return " ".join(parts)
+    return str(content) if content is not None else ""
+
+
 class ContentFilterMiddleware(AgentMiddleware):
     """
     Deterministic guardrail that blocks requests containing banned keywords.
@@ -87,7 +104,7 @@ class ContentFilterMiddleware(AgentMiddleware):
         if first_message.type != "human":
             return None
 
-        content = first_message.content.lower()
+        content = _extract_text_content(first_message.content).lower()
 
         for keyword in self.banned_keywords:
             if keyword in content:
@@ -153,8 +170,7 @@ class ContentFilterMiddleware(AgentMiddleware):
             )
 
         if isinstance(result, ToolMessage) and result.content:
-            content_str = result.content if isinstance(result.content, str) else str(result.content)
-            content = content_str.lower()
+            content = _extract_text_content(result.content).lower()
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
@@ -211,8 +227,7 @@ class ContentFilterMiddleware(AgentMiddleware):
             )
 
         if isinstance(result, ToolMessage) and result.content:
-            content_str = result.content if isinstance(result.content, str) else str(result.content)
-            content = content_str.lower()
+            content = _extract_text_content(result.content).lower()
             for keyword in self.banned_keywords:
                 if keyword in content:
                     logger.warning(
@@ -258,7 +273,7 @@ class SafetyGuardrailMiddleware(AgentMiddleware):
         if not isinstance(last_message, AIMessage):
             return None
 
-        content = last_message.content.lower()
+        content = _extract_text_content(last_message.content).lower()
 
         for pattern in self.blocked_patterns:
 
@@ -427,19 +442,19 @@ class Guardrails:
             ],
         )
     
-    def get_input_guardrail_agent(self):
+    def get_input_guardrail_agent(self) -> Any:
         """Get input guardrail agent"""
         if self.input_guardrail_agent is None:
             self._build_input_guardrail_agent()
         return self.input_guardrail_agent
 
-    def get_output_guardrail_agent(self):
+    def get_output_guardrail_agent(self) -> Any:
         """Get output guardrail agent"""
         if self.output_guardrail_agent is None:
             self._build_output_guardrail_agent()
         return self.output_guardrail_agent
 
-    async def get_combined_guardrail_agent(self):
+    async def get_combined_guardrail_agent(self) -> Any:
         """Get combined guardrail agent."""
         if self.combined_guardrail_agent is None:
             await self._build_combined_guardrail_agent()

@@ -6,7 +6,7 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, List
 from state.adaptive_state import AdaptiveRAGState
 from langchain_classic.schema import Document
 from langchain_core.prompts import ChatPromptTemplate
@@ -30,7 +30,7 @@ class RetrievalNodes:
         self.llm_checker = llm_checker
         self.llm_generator = llm_generator if llm_generator is not None else llm_checker
         self.guardrails = guardrails or Guardrails(llm_checker=self.llm_checker, llm_generator=self.llm_generator)
-        self.external_search_agent = None
+        self.external_search_agent: Any = None
 
     async def query_analyzer(self, state: AdaptiveRAGState) -> AdaptiveRAGState:
         """
@@ -96,12 +96,17 @@ class RetrievalNodes:
         logger.info("Executing external search.")
         logger.debug("External search query: %s", state.question)
 
-        if self.external_search_agent is None:
+        agent = self.external_search_agent
+        if agent is None:
             logger.info("Initializing combined guardrail agent lazily for external search...")
-            self.external_search_agent = await self.guardrails.get_combined_guardrail_agent()
+            agent = await self.guardrails.get_combined_guardrail_agent()
+            self.external_search_agent = agent
             logger.info("Combined guardrail agent initialized successfully with MCP tools.")
 
-        response = await self.external_search_agent.ainvoke(
+        if agent is None:
+            raise RuntimeError("Failed to initialize external search agent.")
+
+        response = await agent.ainvoke(
             {
                 "messages": [
                     ("user", state.question)
